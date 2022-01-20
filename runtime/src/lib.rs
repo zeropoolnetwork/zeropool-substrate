@@ -31,7 +31,7 @@ pub use frame_support::{
 		constants::{BlockExecutionWeight, ExtrinsicBaseWeight, RocksDbWeight, WEIGHT_PER_SECOND},
 		IdentityFee, Weight,
 	},
-	StorageValue,
+	PalletId, StorageValue,
 };
 pub use pallet_balances::Call as BalancesCall;
 pub use pallet_timestamp::Call as TimestampCall;
@@ -40,7 +40,6 @@ use pallet_transaction_payment::CurrencyAdapter;
 pub use sp_runtime::BuildStorage;
 pub use sp_runtime::{Perbill, Permill};
 
-/// Import the template pallet.
 pub use zeropool_pallet;
 
 /// An index to a block.
@@ -274,9 +273,14 @@ impl pallet_sudo::Config for Runtime {
 	type Call = Call;
 }
 
-/// Configure the pallet-template in pallets/template.
+parameter_types! {
+	pub const ZeropoolPalletId: PalletId = PalletId(*b"zeropool");
+}
+
 impl zeropool_pallet::Config for Runtime {
 	type Event = Event;
+	type PalletId = ZeropoolPalletId;
+	type Currency = Balances;
 }
 
 // Create the runtime by composing the FRAME pallets that were previously configured.
@@ -294,7 +298,6 @@ construct_runtime!(
 		Balances: pallet_balances,
 		TransactionPayment: pallet_transaction_payment,
 		Sudo: pallet_sudo,
-		// Include the custom logic from the pallet-template in the runtime.
 		Zeropool: zeropool_pallet,
 	}
 );
@@ -474,7 +477,7 @@ impl_runtime_apis! {
 			list_benchmark!(list, extra, frame_system, SystemBench::<Runtime>);
 			list_benchmark!(list, extra, pallet_balances, Balances);
 			list_benchmark!(list, extra, pallet_timestamp, Timestamp);
-			list_benchmark!(list, extra, zeropool_pallet, TemplateModule);
+			list_benchmark!(list, extra, zeropool_pallet, Zeropool);
 
 			let storage_info = AllPalletsWithSystem::storage_info();
 
@@ -512,7 +515,7 @@ impl_runtime_apis! {
 			add_benchmark!(params, batches, frame_system, SystemBench::<Runtime>);
 			add_benchmark!(params, batches, pallet_balances, Balances);
 			add_benchmark!(params, batches, pallet_timestamp, Timestamp);
-			add_benchmark!(params, batches, zeropool_pallet, TemplateModule);
+			add_benchmark!(params, batches, zeropool_pallet, Zeropool);
 
 			Ok(batches)
 		}
