@@ -21,7 +21,7 @@ pub mod pallet {
 	use frame_support::{
 		pallet_prelude::*,
 		sp_runtime::traits::{AccountIdConversion, CheckedSub},
-		traits::{ExistenceRequirement, ReservableCurrency},
+		traits::{Currency, ExistenceRequirement},
 		PalletId,
 	};
 	use frame_system::pallet_prelude::*;
@@ -34,7 +34,7 @@ pub mod pallet {
 		#[pallet::constant]
 		type PalletId: Get<PalletId>;
 		/// The staking balance.
-		type Currency: ReservableCurrency<Self::AccountId>;
+		type Currency: Currency<Self::AccountId>;
 	}
 
 	#[pallet::pallet]
@@ -70,7 +70,6 @@ pub mod pallet {
 	impl<T: Config> Pallet<T> {
 		#[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1))]
 		pub fn lock(origin: OriginFor<T>, amount: BalanceOf<T>) -> DispatchResult {
-			// let account_id = Self::account_id();
 			let who = ensure_signed(origin)?;
 
 			let total = <Balances<T>>::get(who.clone())
@@ -79,13 +78,12 @@ pub mod pallet {
 
 			<Balances<T>>::insert(who.clone(), total);
 
-			let res = T::Currency::transfer(
-				&Self::account_id(),
+			T::Currency::transfer(
 				&who,
+				&Self::account_id(),
 				amount,
 				ExistenceRequirement::KeepAlive,
-			);
-			debug_assert!(res.is_ok());
+			)?;
 
 			Self::deposit_event(Event::Lock(who, amount));
 			Ok(())
@@ -93,7 +91,6 @@ pub mod pallet {
 
 		#[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1))]
 		pub fn release(origin: OriginFor<T>, amount: BalanceOf<T>) -> DispatchResult {
-			// let account_id = Self::account_id();
 			let who = ensure_signed(origin)?;
 
 			if let Some(balance) = <Balances<T>>::get(who.clone()) {
@@ -105,12 +102,13 @@ pub mod pallet {
 					<Balances<T>>::insert(who.clone(), new_balance);
 				}
 
-				T::Currency::transfer(
-					&who,
+				let res = T::Currency::transfer(
 					&Self::account_id(),
+					&who,
 					amount,
 					ExistenceRequirement::KeepAlive,
-				)?;
+				);
+				debug_assert!(res.is_ok());
 			} else {
 				return Err(Error::<T>::InsufficientBalance.into())
 			}
