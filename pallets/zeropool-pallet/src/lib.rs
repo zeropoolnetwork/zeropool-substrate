@@ -102,13 +102,12 @@ pub mod pallet {
 					<Balances<T>>::insert(who.clone(), new_balance);
 				}
 
-				let res = T::Currency::transfer(
+				T::Currency::transfer(
 					&Self::account_id(),
 					&who,
 					amount,
 					ExistenceRequirement::KeepAlive,
-				);
-				debug_assert!(res.is_ok());
+				)?;
 			} else {
 				return Err(Error::<T>::InsufficientBalance.into())
 			}
