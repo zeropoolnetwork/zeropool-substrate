@@ -16,6 +16,7 @@ targets = ['x86_64-unknown-linux-gnu']
 default-features = false
 path = '../pallets/zeropool-pallet'
 version = '4.0.0-dev'
+features = ['borsh_support']
 
 [build-dependencies.substrate-wasm-builder]
 git = 'https://github.com/paritytech/substrate.git'

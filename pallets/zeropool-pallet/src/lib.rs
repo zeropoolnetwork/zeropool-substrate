@@ -1,6 +1,8 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use frame_support::traits::Currency;
+use borsh::{BorshDeserialize, BorshSerialize};
+use ff_uint::{construct_primefield_params, construct_uint, Num};
+use frame_support::{inherent::Vec, traits::Currency};
 pub use pallet::*;
 
 #[cfg(test)]
@@ -14,6 +16,48 @@ mod benchmarking;
 
 type AccountIdOf<T> = <T as frame_system::Config>::AccountId;
 type BalanceOf<T> = <<T as Config>::Currency as Currency<AccountIdOf<T>>>::Balance;
+
+construct_uint! {
+	struct U256(4);
+}
+
+construct_primefield_params! {
+	pub struct Fr(super::U256);
+
+	impl PrimeFieldParams for Fr {
+		type Inner = super::U256;
+		const MODULUS: &'static str = "21888242871839275222246405745257275088548364400416034343698204186575808495617";
+		const GENERATOR: &'static str = "7";
+   }
+}
+
+#[derive(Debug, BorshSerialize, BorshDeserialize)]
+#[repr(u16)]
+enum TxType {
+	Deposit = 0,
+	Transfer = 1,
+	Withdraw = 2,
+}
+
+#[derive(Debug, BorshSerialize, BorshDeserialize)]
+pub struct MerkleProof<const L: usize> {
+	pub sibling: [Num<Fr>; L],
+	pub path: [bool; L],
+}
+
+#[derive(Debug, BorshSerialize, BorshDeserialize)]
+struct Transaction {
+	nullifier: Num<Fr>,
+	out_commit: Num<Fr>,
+	transfer_index: Num<Fr>,
+	energy_amount: Num<Fr>,
+	token_amount: Num<Fr>,
+	transact_proof: Vec<Num<Fr>>, // FIXME
+	root_after: Num<Fr>,
+	tree_proof: Vec<Num<Fr>>, // FIXME
+	tx_type: TxType,
+	memo: Vec<u8>,
+}
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -58,6 +102,7 @@ pub mod pallet {
 	#[pallet::error]
 	pub enum Error<T> {
 		InsufficientBalance,
+		InvalidTxFormat,
 	}
 
 	impl<T: Config> Pallet<T> {
@@ -68,6 +113,16 @@ pub mod pallet {
 
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
+		// TODO: Try using SCALE codec instead of borsh
+		#[pallet::weight(10_000)]
+		pub fn transact(origin: OriginFor<T>, data: Vec<u8>) -> DispatchResult {
+			let who = ensure_signed(origin)?;
+			let decoded =
+				Transaction::try_from_slice(&data).map_err(|_| Error::<T>::InvalidTxFormat)?;
+
+			Ok(())
+		}
+
 		#[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1))]
 		pub fn lock(origin: OriginFor<T>, amount: BalanceOf<T>) -> DispatchResult {
 			let who = ensure_signed(origin)?;

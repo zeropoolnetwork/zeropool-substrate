@@ -12,6 +12,10 @@ repository = 'https://github.com/substrate-developer-hub/substrate-node-template
 [package.metadata.docs.rs]
 targets = ['x86_64-unknown-linux-gnu']
 
+[dependencies]
+borsh = { version = '0.9.1', default-features = false }
+ff-uint =  { version = '0.2.2', default-features = false, features = ['borsh_support'] }
+
 [dependencies.codec]
 default-features = false
 features = ['derive']
@@ -66,7 +70,7 @@ tag = 'monthly-2021-12'
 version = '4.0.0-dev'
 
 [features]
-default = ['std']
+default = ['std', 'borsh_support']
 runtime-benchmarks = ['frame-benchmarking']
 std = [
     'codec/std',
@@ -74,5 +78,8 @@ std = [
     'frame-support/std',
     'frame-system/std',
     'frame-benchmarking/std',
+    'borsh/std',
+    'ff-uint/std'
 ]
 try-runtime = ['frame-support/try-runtime']
+borsh_support = ['ff-uint/borsh_support']
