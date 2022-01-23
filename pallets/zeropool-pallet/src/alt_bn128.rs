@@ -194,13 +194,13 @@ impl BorshDeserialize for WrapG2 {
 /// ```
 pub fn alt_bn128_g1_multiexp(data: &[u8]) -> core::result::Result<Vec<u8>, ZeroPoolError> {
     let items = <Vec<(WrapG1, WrapFr)>>::try_from_slice(data)
-        .map_err(|e| ZeroPoolError::AltBn128DeserializationError)?
+        .map_err(|_e| ZeroPoolError::AltBn128DeserializationError)?
         .into_iter()
         .map(|e| (e.0 .0, e.1 .0))
         .collect::<Vec<_>>();
     let result = WrapG1(G1::multiexp(&items))
         .try_to_vec()
-        .map_err(|e| ZeroPoolError::AltBn128SerializationError)?;
+        .map_err(|_e| ZeroPoolError::AltBn128SerializationError)?;
     Ok(result)
 }
 
@@ -237,7 +237,7 @@ pub fn alt_bn128_g1_multiexp(data: &[u8]) -> core::result::Result<Vec<u8>, ZeroP
 /// ```
 pub fn alt_bn128_g1_sum(data: &[u8]) -> core::result::Result<Vec<u8>, ZeroPoolError> {
     let items = <Vec<(bool, WrapG1)>>::try_from_slice(data)
-        .map_err(|e| ZeroPoolError::AltBn128DeserializationError)?
+        .map_err(|_e| ZeroPoolError::AltBn128DeserializationError)?
         .into_iter()
         .map(|e| (e.0, e.1 .0))
         .collect::<Vec<_>>();
@@ -252,7 +252,7 @@ pub fn alt_bn128_g1_sum(data: &[u8]) -> core::result::Result<Vec<u8>, ZeroPoolEr
     }
     let result = WrapG1(acc)
         .try_to_vec()
-        .map_err(|e| ZeroPoolError::AltBn128SerializationError)?;
+        .map_err(|_e| ZeroPoolError::AltBn128SerializationError)?;
     Ok(result)
 }
 
@@ -290,7 +290,7 @@ pub fn alt_bn128_g1_sum(data: &[u8]) -> core::result::Result<Vec<u8>, ZeroPoolEr
 /// ```
 pub fn alt_bn128_pairing_check(data: &[u8]) -> core::result::Result<bool, ZeroPoolError> {
     let items = <Vec<(WrapG1, WrapG2)>>::try_from_slice(data)
-        .map_err(|e| ZeroPoolError::AltBn128DeserializationError)?
+        .map_err(|_e| ZeroPoolError::AltBn128DeserializationError)?
         .into_iter()
         .map(|e| (e.0 .0, e.1 .0))
         .collect::<Vec<_>>();
