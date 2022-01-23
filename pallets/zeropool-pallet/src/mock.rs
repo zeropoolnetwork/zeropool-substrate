@@ -1,5 +1,5 @@
 use crate as zeropool_pallet;
-use frame_support::{parameter_types, traits::ConstU32, PalletId};
+use frame_support::{parameter_types, PalletId};
 use sp_core::H256;
 use sp_runtime::{
 	testing::Header,
@@ -8,10 +8,7 @@ use sp_runtime::{
 
 type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
 type Block = frame_system::mocking::MockBlock<Test>;
-pub(crate) type AccountId = u64;
-pub(crate) type AccountIndex = u64;
-pub(crate) type BlockNumber = u64;
-pub(crate) type Balance = u128;
+type Balance = u128;
 
 // Configure a mock runtime to test the pallet.
 frame_support::construct_runtime!(
