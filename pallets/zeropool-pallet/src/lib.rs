@@ -1,7 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use ff_uint::{construct_primefield_params, construct_uint, Num};
+use ff_uint::construct_uint;
 use frame_support::{inherent::Vec, traits::Currency};
 pub use pallet::*;
 
@@ -31,16 +31,6 @@ construct_uint! {
 	struct U256(4);
 }
 
-construct_primefield_params! {
-	pub struct Fr(super::U256);
-
-	impl PrimeFieldParams for Fr {
-		type Inner = super::U256;
-		const MODULUS: &'static str = "21888242871839275222246405745257275088548364400416034343698204186575808495617";
-		const GENERATOR: &'static str = "7";
-   }
-}
-
 #[derive(Debug, BorshSerialize, BorshDeserialize)]
 #[repr(u16)]
 enum TxType {
@@ -51,20 +41,20 @@ enum TxType {
 
 #[derive(Debug, BorshSerialize, BorshDeserialize)]
 pub struct MerkleProof<const L: usize> {
-	pub sibling: [Num<Fr>; L],
+	pub sibling: [U256; L],
 	pub path: [bool; L],
 }
 
 #[derive(Debug, BorshSerialize, BorshDeserialize)]
 struct Transaction {
-	nullifier: Num<Fr>,
-	out_commit: Num<Fr>,
-	transfer_index: Num<Fr>,
-	energy_amount: Num<Fr>,
-	token_amount: Num<Fr>,
-	transact_proof: Vec<Num<Fr>>, // FIXME
-	root_after: Num<Fr>,
-	tree_proof: Vec<Num<Fr>>, // FIXME
+	nullifier: U256,
+	out_commit: U256,
+	transfer_index: U256,
+	energy_amount: U256,
+	token_amount: U256,
+	transact_proof: [U256; 8],
+	root_after: U256,
+	tree_proof: [U256; 8],
 	tx_type: TxType,
 	memo: Vec<u8>,
 }
