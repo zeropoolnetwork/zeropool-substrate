@@ -16,6 +16,13 @@ targets = ['x86_64-unknown-linux-gnu']
 borsh = { version = '0.9.1', default-features = false }
 ff-uint =  { version = '0.2.2', default-features = false, features = ['borsh_support'] }
 
+[dependencies.bn]
+package = "zeropool-bn"
+version = "0.5.11"
+default-features = false
+features = ["borsh"]
+
+
 [dependencies.codec]
 default-features = false
 features = ['derive']

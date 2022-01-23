@@ -5,6 +5,16 @@ use ff_uint::{construct_primefield_params, construct_uint, Num};
 use frame_support::{inherent::Vec, traits::Currency};
 pub use pallet::*;
 
+#[derive(Debug, Clone, PartialEq, Eq, BorshDeserialize, BorshSerialize)]
+pub enum ZeroPoolError {
+    AltBn128DeserializationError { msg: String },
+    AltBn128SerializationError { msg: String },
+	NotConsistentGroth16InputsError
+}
+
+mod alt_bn128;
+mod verifier;
+
 #[cfg(test)]
 mod mock;
 

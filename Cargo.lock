@@ -2614,6 +2614,9 @@ name = "lazy_static"
 version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e2abad23fbc42b3700f2f279844dc832adb2b2eb069b2df918f455c4e18cc646"
+dependencies = [
+ "spin",
+]
 
 [[package]]
 name = "lazycell"
@@ -8043,6 +8046,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "zeropool-bn"
+version = "0.5.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "71e61de68ede9ffdd69c01664f65a178c5188b73f78faa21f0936016a888ff7c"
+dependencies = [
+ "borsh",
+ "byteorder",
+ "crunchy",
+ "lazy_static",
+ "rand 0.8.4",
+ "rustc-hex",
+]
+
+[[package]]
 name = "zeropool-pallet"
 version = "4.0.0-dev"
 dependencies = [
@@ -8057,6 +8074,7 @@ dependencies = [
  "sp-core",
  "sp-io",
  "sp-runtime",
+ "zeropool-bn",
 ]
 
 [[package]]
