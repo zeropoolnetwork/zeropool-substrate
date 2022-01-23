@@ -18,34 +18,7 @@ const initAccounts = () => {
   FERDIE = keyring.addFromUri('//Ferdie', { name: 'Alice default' })
 }
 
-const createAccount = (_mnemonic) => {
-  const mnemonic = _mnemonic && mnemonicValidate(_mnemonic) 
-    ? _mnemonic 
-    : mnemonicGenerate();
-  const account = keyring.addFromUri(mnemonic);
-  
-  return { account, mnemonic }
-}
-
-const balance = async (api, address) => {
-  const balance = await api.derive.balances.all(address);
-  const available = balance.availableBalance.toString();
-  const dots = available / (10 ** api.registry.chainDecimals);
-  
-  return dots.toFixed(4);
-}
-
-// const connect = async () => {
-//   const wsProvider = new WsProvider('ws://127.0.0.1:9944');
-//   const api = new ApiPromise({ provider: wsProvider });
-  
-//   return api.isReady;
-// }
-
 const lock = (api$) =>
-  // const message = stringToU8a('this is our message')
-  // const signature = FROM.sign(message)
-  // const isValid = FROM.verify(message, signature, FROM.publicKey)
   api$.pipe(
     switchMap(api =>
       api.query.system.account(FROM.address).pipe(
