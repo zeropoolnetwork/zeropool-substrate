@@ -10,18 +10,18 @@ pub type G2 = [U256; 4];
 
 #[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
 pub struct VK {
-    alpha: G1,
-    beta: G2,
-    gamma: G2,
-    delta: G2,
-    ic: Vec<G1>,
+    pub alpha: G1,
+    pub beta: G2,
+    pub gamma: G2,
+    pub delta: G2,
+    pub ic: Vec<G1>,
 }
 
 #[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
 pub struct Proof {
-    a: G1,
-    b: G2,
-    c: G1,
+    pub a: G1,
+    pub b: G2,
+    pub c: G1,
 }
 
 #[inline]

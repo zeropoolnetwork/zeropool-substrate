@@ -28,21 +28,6 @@ type AccountIdOf<T> = <T as frame_system::Config>::AccountId;
 type BalanceOf<T> = <<T as Config>::Currency as Currency<AccountIdOf<T>>>::Balance;
 
 #[derive(Debug, BorshDeserialize)]
-pub struct Proof {
-	pub a: [U256; 2],
-	pub b: [U256; 4],
-	pub c: [U256; 2],
-}
-
-#[derive(Debug, BorshDeserialize)]
-#[repr(u16)]
-enum TxType {
-	Deposit = 0,
-	Transfer = 1,
-	Withdraw = 2,
-}
-
-#[derive(Debug, BorshDeserialize)]
 pub struct MerkleProof<const L: usize> {
 	pub sibling: [U256; L],
 	pub path: [bool; L],

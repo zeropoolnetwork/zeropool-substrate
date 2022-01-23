@@ -15,6 +15,8 @@ targets = ['x86_64-unknown-linux-gnu']
 [dependencies]
 borsh = { version = '0.9.1', default-features = false }
 ff-uint =  { version = '0.2.2', default-features = false, features = ['borsh_support'] }
+num-traits = { version = "0.2.14", default-features = false }
+num-derive = "0.3.3"
 
 [dependencies.bn]
 package = "zeropool-bn"
@@ -86,7 +88,8 @@ std = [
     'frame-system/std',
     'frame-benchmarking/std',
     'borsh/std',
-    'ff-uint/std'
+    'ff-uint/std',
+    'num-traits/std',
 ]
 try-runtime = ['frame-support/try-runtime']
 borsh_support = ['ff-uint/borsh_support']
