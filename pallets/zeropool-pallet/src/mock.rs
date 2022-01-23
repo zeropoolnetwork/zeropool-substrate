@@ -1,6 +1,5 @@
 use crate as zeropool_pallet;
-use frame_support::parameter_types;
-use frame_system as system;
+use frame_support::{parameter_types, traits::ConstU32, PalletId};
 use sp_core::H256;
 use sp_runtime::{
 	testing::Header,
@@ -9,6 +8,10 @@ use sp_runtime::{
 
 type UncheckedExtrinsic = frame_system::mocking::MockUncheckedExtrinsic<Test>;
 type Block = frame_system::mocking::MockBlock<Test>;
+pub(crate) type AccountId = u64;
+pub(crate) type AccountIndex = u64;
+pub(crate) type BlockNumber = u64;
+pub(crate) type Balance = u128;
 
 // Configure a mock runtime to test the pallet.
 frame_support::construct_runtime!(
@@ -18,16 +21,18 @@ frame_support::construct_runtime!(
 		UncheckedExtrinsic = UncheckedExtrinsic,
 	{
 		System: frame_system::{Pallet, Call, Config, Storage, Event<T>},
-		TemplateModule: zeropool_pallet::{Pallet, Call, Storage, Event<T>},
+		Balances: pallet_balances::{Pallet, Call, Storage, Config<T>, Event<T>},
+		Zeropool: zeropool_pallet::{Pallet, Call, Storage, Event<T>},
 	}
 );
 
 parameter_types! {
 	pub const BlockHashCount: u64 = 250;
 	pub const SS58Prefix: u8 = 42;
+	pub static ExistentialDeposit: Balance = 1;
 }
 
-impl system::Config for Test {
+impl frame_system::Config for Test {
 	type BaseCallFilter = frame_support::traits::Everything;
 	type BlockWeights = ();
 	type BlockLength = ();
@@ -45,7 +50,7 @@ impl system::Config for Test {
 	type BlockHashCount = BlockHashCount;
 	type Version = ();
 	type PalletInfo = PalletInfo;
-	type AccountData = ();
+	type AccountData = pallet_balances::AccountData<Balance>;
 	type OnNewAccount = ();
 	type OnKilledAccount = ();
 	type SystemWeightInfo = ();
@@ -53,11 +58,29 @@ impl system::Config for Test {
 	type OnSetCode = ();
 }
 
+impl pallet_balances::Config for Test {
+	type MaxLocks = ();
+	type MaxReserves = ();
+	type ReserveIdentifier = [u8; 8];
+	type Balance = Balance;
+	type Event = Event;
+	type DustRemoval = ();
+	type ExistentialDeposit = ExistentialDeposit;
+	type AccountStore = System;
+	type WeightInfo = ();
+}
+
+parameter_types! {
+	pub const TestPalletId: PalletId = PalletId(*b"zeropool");
+}
+
 impl zeropool_pallet::Config for Test {
 	type Event = Event;
+	type PalletId = TestPalletId;
+	type Currency = Balances;
 }
 
 // Build genesis storage according to the mock runtime.
 pub fn new_test_ext() -> sp_io::TestExternalities {
-	system::GenesisConfig::default().build_storage::<Test>().unwrap().into()
+	frame_system::GenesisConfig::default().build_storage::<Test>().unwrap().into()
 }
