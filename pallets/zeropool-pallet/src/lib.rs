@@ -1,7 +1,7 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use ff_uint::{construct_primefield_params, construct_uint};
+use ff_uint::construct_uint;
 use frame_support::{inherent::Vec, traits::Currency};
 pub use pallet::*;
 
@@ -19,16 +19,6 @@ type BalanceOf<T> = <<T as Config>::Currency as Currency<AccountIdOf<T>>>::Balan
 
 construct_uint! {
 	struct U256(4);
-}
-
-construct_primefield_params! {
-	pub struct Fr(super::U256);
-
-	impl PrimeFieldParams for Fr {
-		type Inner = super::U256;
-		const MODULUS: &'static str = "21888242871839275222246405745257275088548364400416034343698204186575808495617";
-		const GENERATOR: &'static str = "7";
-   }
 }
 
 #[derive(Debug, BorshSerialize, BorshDeserialize)]
