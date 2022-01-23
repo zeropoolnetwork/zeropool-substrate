@@ -1,18 +1,18 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use borsh::{BorshDeserialize, BorshSerialize};
-use ff_uint::construct_uint;
-use frame_support::{inherent::Vec, traits::Currency};
+#[cfg(not(feature = "std"))]
+extern crate alloc;
+
+use crate::num::U256;
+use borsh::BorshDeserialize;
+use frame_support::traits::Currency;
+use maybestd::vec::Vec;
 pub use pallet::*;
 
-#[derive(Debug, Clone, PartialEq, Eq, BorshDeserialize, BorshSerialize)]
-pub enum ZeroPoolError {
-    AltBn128DeserializationError { msg: String },
-    AltBn128SerializationError { msg: String },
-	NotConsistentGroth16InputsError
-}
-
 mod alt_bn128;
+mod error;
+mod maybestd;
+mod num;
 mod verifier;
 
 #[cfg(test)]
@@ -27,11 +27,14 @@ mod benchmarking;
 type AccountIdOf<T> = <T as frame_system::Config>::AccountId;
 type BalanceOf<T> = <<T as Config>::Currency as Currency<AccountIdOf<T>>>::Balance;
 
-construct_uint! {
-	struct U256(4);
+#[derive(Debug, BorshDeserialize)]
+pub struct Proof {
+	pub a: [U256; 2],
+	pub b: [U256; 4],
+	pub c: [U256; 2],
 }
 
-#[derive(Debug, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, BorshDeserialize)]
 #[repr(u16)]
 enum TxType {
 	Deposit = 0,
@@ -39,13 +42,13 @@ enum TxType {
 	Withdraw = 2,
 }
 
-#[derive(Debug, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, BorshDeserialize)]
 pub struct MerkleProof<const L: usize> {
 	pub sibling: [U256; L],
 	pub path: [bool; L],
 }
 
-#[derive(Debug, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, BorshDeserialize)]
 struct Transaction {
 	nullifier: U256,
 	out_commit: U256,

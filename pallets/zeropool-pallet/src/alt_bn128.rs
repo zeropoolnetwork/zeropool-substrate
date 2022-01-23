@@ -1,16 +1,16 @@
-use bn::arith::U256;
-use bn::{pairing_batch, AffineG1, AffineG2, Fq, Fq2, Fr, Group, GroupError, Gt, G1, G2};
-use borsh::{BorshDeserialize, BorshSerialize};
-use std::io::{self, Error, ErrorKind, Write};
-use crate::ZeroPoolError;
+use bn::{
+    arith::U256, pairing_batch, AffineG1, AffineG2, Fq, Fq2, Fr, Group, GroupError, Gt, G1, G2,
+};
+use borsh::{
+    maybestd::io::{self, Error, ErrorKind, Result, Write},
+    BorshDeserialize, BorshSerialize,
+};
 
-
-
+use crate::{error::ZeroPoolError, maybestd::vec::Vec};
 
 const POINT_IS_NOT_ON_THE_CURVE: &str = "point is not on the curve";
 const POINT_IS_NOT_IN_THE_SUBGROUP: &str = "point is not in the subgroup";
 const NOT_IN_FIELD: &str = "integer is not less than modulus";
-
 
 #[derive(Copy, Clone)]
 struct WrapU256(pub U256);
@@ -31,26 +31,26 @@ struct WrapG1(pub G1);
 struct WrapG2(pub G2);
 
 impl BorshSerialize for WrapU256 {
-    fn serialize<W: Write>(&self, writer: &mut W) -> Result<(), Error> {
+    fn serialize<W: Write>(&self, writer: &mut W) -> Result<()> {
         self.0 .0.serialize(writer)
     }
 }
 
 impl BorshDeserialize for WrapU256 {
-    fn deserialize(buf: &mut &[u8]) -> Result<Self, Error> {
+    fn deserialize(buf: &mut &[u8]) -> Result<Self> {
         let value = <[u128; 2]>::deserialize(buf)?;
         Ok(WrapU256(U256(value)))
     }
 }
 
 impl BorshSerialize for WrapFr {
-    fn serialize<W: Write>(&self, writer: &mut W) -> Result<(), Error> {
+    fn serialize<W: Write>(&self, writer: &mut W) -> Result<()> {
         WrapU256(self.0.into_u256()).serialize(writer)
     }
 }
 
 impl BorshDeserialize for WrapFr {
-    fn deserialize(buf: &mut &[u8]) -> Result<Self, Error> {
+    fn deserialize(buf: &mut &[u8]) -> Result<Self> {
         let num = WrapU256::deserialize(buf)?.0;
         Fr::new(num)
             .ok_or_else(|| Error::new(ErrorKind::InvalidData, NOT_IN_FIELD))
@@ -59,13 +59,13 @@ impl BorshDeserialize for WrapFr {
 }
 
 impl BorshSerialize for WrapFq {
-    fn serialize<W: Write>(&self, writer: &mut W) -> Result<(), Error> {
+    fn serialize<W: Write>(&self, writer: &mut W) -> Result<()> {
         WrapU256(self.0.into_u256()).serialize(writer)
     }
 }
 
 impl BorshDeserialize for WrapFq {
-    fn deserialize(buf: &mut &[u8]) -> Result<Self, Error> {
+    fn deserialize(buf: &mut &[u8]) -> Result<Self> {
         let num = WrapU256::deserialize(buf)?.0;
         Fq::from_u256(num)
             .map_err(|_| Error::new(ErrorKind::InvalidData, NOT_IN_FIELD))
@@ -74,14 +74,14 @@ impl BorshDeserialize for WrapFq {
 }
 
 impl BorshSerialize for WrapFq2 {
-    fn serialize<W: Write>(&self, writer: &mut W) -> Result<(), Error> {
+    fn serialize<W: Write>(&self, writer: &mut W) -> Result<()> {
         WrapFq(self.0.real()).serialize(writer)?;
         WrapFq(self.0.imaginary()).serialize(writer)
     }
 }
 
 impl BorshDeserialize for WrapFq2 {
-    fn deserialize(buf: &mut &[u8]) -> Result<Self, Error> {
+    fn deserialize(buf: &mut &[u8]) -> Result<Self> {
         let re = WrapFq::deserialize(buf)?.0;
         let im = WrapFq::deserialize(buf)?.0;
 
@@ -90,23 +90,23 @@ impl BorshDeserialize for WrapFq2 {
 }
 
 impl BorshSerialize for WrapG1 {
-    fn serialize<W: Write>(&self, writer: &mut W) -> Result<(), io::Error> {
+    fn serialize<W: Write>(&self, writer: &mut W) -> Result<()> {
         match AffineG1::from_jacobian(self.0) {
             Some(p) => {
                 WrapFq(p.x()).serialize(writer)?;
                 WrapFq(p.y()).serialize(writer)?;
-            }
+            },
             None => {
                 WrapFq(Fq::zero()).serialize(writer)?;
                 WrapFq(Fq::zero()).serialize(writer)?;
-            }
+            },
         }
         Ok(())
     }
 }
 
 impl BorshDeserialize for WrapG1 {
-    fn deserialize(buf: &mut &[u8]) -> Result<Self, io::Error> {
+    fn deserialize(buf: &mut &[u8]) -> Result<Self> {
         let x = WrapFq::deserialize(buf)?.0;
         let y = WrapFq::deserialize(buf)?.0;
         if x.is_zero() && y.is_zero() {
@@ -114,12 +114,10 @@ impl BorshDeserialize for WrapG1 {
         } else {
             AffineG1::new(x, y)
                 .map_err(|e| match e {
-                    GroupError::NotOnCurve => {
-                        io::Error::new(ErrorKind::InvalidData, POINT_IS_NOT_ON_THE_CURVE)
-                    }
-                    GroupError::NotInSubgroup => {
-                        io::Error::new(ErrorKind::InvalidData, POINT_IS_NOT_IN_THE_SUBGROUP)
-                    }
+                    GroupError::NotOnCurve =>
+                        io::Error::new(ErrorKind::InvalidData, POINT_IS_NOT_ON_THE_CURVE),
+                    GroupError::NotInSubgroup =>
+                        io::Error::new(ErrorKind::InvalidData, POINT_IS_NOT_IN_THE_SUBGROUP),
                 })
                 .map(|p| WrapG1(p.into()))
         }
@@ -127,23 +125,23 @@ impl BorshDeserialize for WrapG1 {
 }
 
 impl BorshSerialize for WrapG2 {
-    fn serialize<W: Write>(&self, writer: &mut W) -> Result<(), io::Error> {
+    fn serialize<W: Write>(&self, writer: &mut W) -> Result<()> {
         match AffineG2::from_jacobian(self.0) {
             Some(p) => {
                 WrapFq2(p.x()).serialize(writer)?;
                 WrapFq2(p.y()).serialize(writer)?;
-            }
+            },
             None => {
                 WrapFq2(Fq2::zero()).serialize(writer)?;
                 WrapFq2(Fq2::zero()).serialize(writer)?;
-            }
+            },
         }
         Ok(())
     }
 }
 
 impl BorshDeserialize for WrapG2 {
-    fn deserialize(buf: &mut &[u8]) -> Result<Self, io::Error> {
+    fn deserialize(buf: &mut &[u8]) -> Result<Self> {
         let x = WrapFq2::deserialize(buf)?.0;
         let y = WrapFq2::deserialize(buf)?.0;
         if x.is_zero() && y.is_zero() {
@@ -151,12 +149,10 @@ impl BorshDeserialize for WrapG2 {
         } else {
             AffineG2::new(x, y)
                 .map_err(|e| match e {
-                    GroupError::NotOnCurve => {
-                        io::Error::new(ErrorKind::InvalidData, POINT_IS_NOT_ON_THE_CURVE)
-                    }
-                    GroupError::NotInSubgroup => {
-                        io::Error::new(ErrorKind::InvalidData, POINT_IS_NOT_IN_THE_SUBGROUP)
-                    }
+                    GroupError::NotOnCurve =>
+                        io::Error::new(ErrorKind::InvalidData, POINT_IS_NOT_ON_THE_CURVE),
+                    GroupError::NotInSubgroup =>
+                        io::Error::new(ErrorKind::InvalidData, POINT_IS_NOT_IN_THE_SUBGROUP),
                 })
                 .map(|p| WrapG2(p.into()))
         }
@@ -168,17 +164,18 @@ impl BorshDeserialize for WrapG2 {
 ///
 /// # Arguments
 ///
-/// * `data` - slice of (g1:G1, fr:Fr), where
-///     G1 is point (x:Fq, y:Fq) on alt_bn128,
-///     alt_bn128 is Y^2 = X^3 + 3 curve over Fq,
-///     Fq is LE-serialized u256 number lesser than 21888242871839275222246405745257275088696311157297823662689037894645226208583
-///     Fr is LE-serialized u256 number lesser than 21888242871839275222246405745257275088548364400416034343698204186575808495617
+/// * `data` - slice of (g1:G1, fr:Fr), where G1 is point (x:Fq, y:Fq) on alt_bn128, alt_bn128 is
+///   Y^2 = X^3 + 3 curve over Fq, Fq is LE-serialized u256 number lesser than
+///   21888242871839275222246405745257275088696311157297823662689037894645226208583 Fr is
+///   LE-serialized u256 number lesser than
+///   21888242871839275222246405745257275088548364400416034343698204186575808495617
 ///
 /// # Errors
 ///
 /// If point coordinates are not on curve, point is not in the subgroup, scalar
 /// is not in the field or data are wrong serialized, for example,
-/// `data.len()%std::mem::sizeof::<(G1,Fr)>()!=0`, the function returns `AltBn128DeserializationError`.
+/// `data.len()%core::mem::sizeof::<(G1,Fr)>()!=0`, the function returns
+/// `AltBn128DeserializationError`.
 ///
 /// If `borsh::BorshSerialize` returns error during serialization, the function
 /// returns `AltBn128SerializationError`.
@@ -194,17 +191,16 @@ impl BorshDeserialize for WrapG2 {
 /// let multiexp_result = base64::decode(multiexp_result_data).unwrap();
 /// let result = alt_bn128_g1_multiexp(&multiexp).unwrap();
 /// assert_eq!(multiexp_result, result);
-///
 /// ```
-pub fn alt_bn128_g1_multiexp(data: &[u8]) -> std::result::Result<Vec<u8>, ZeroPoolError> {
+pub fn alt_bn128_g1_multiexp(data: &[u8]) -> core::result::Result<Vec<u8>, ZeroPoolError> {
     let items = <Vec<(WrapG1, WrapFr)>>::try_from_slice(data)
-        .map_err(|e| ZeroPoolError::AltBn128DeserializationError { msg: format!("{}", e) })?
+        .map_err(|e| ZeroPoolError::AltBn128DeserializationError)?
         .into_iter()
         .map(|e| (e.0 .0, e.1 .0))
         .collect::<Vec<_>>();
     let result = WrapG1(G1::multiexp(&items))
         .try_to_vec()
-        .map_err(|e| ZeroPoolError::AltBn128SerializationError { msg: format!("{}", e) })?;
+        .map_err(|e| ZeroPoolError::AltBn128SerializationError)?;
     Ok(result)
 }
 
@@ -213,17 +209,17 @@ pub fn alt_bn128_g1_multiexp(data: &[u8]) -> std::result::Result<Vec<u8>, ZeroPo
 ///
 /// # Arguments
 ///
-/// * `data` - slice of (is_negative_sign:bool, g1:G1), where
-///     bool is serialized as byte, 0 for false and 1 for true,
-///     G1 is point (x:Fq, y:Fq) on alt_bn128,
-///     alt_bn128 is Y^2 = X^3 + 3 curve over Fq,
-///     Fq is LE-serialized u256 number lesser than 21888242871839275222246405745257275088696311157297823662689037894645226208583
+/// * `data` - slice of (is_negative_sign:bool, g1:G1), where bool is serialized as byte, 0 for
+///   false and 1 for true, G1 is point (x:Fq, y:Fq) on alt_bn128, alt_bn128 is Y^2 = X^3 + 3 curve
+///   over Fq, Fq is LE-serialized u256 number lesser than
+///   21888242871839275222246405745257275088696311157297823662689037894645226208583
 ///
 /// # Errors
 ///
 /// If point coordinates are not on curve, point is not in the subgroup, scalar
 /// is not in the field or data are wrong serialized, for example,
-/// `data.len()%std::mem::sizeof::<(bool, G1)>()!=0`, the function returns `AltBn128DeserializationError`.
+/// `data.len()%core::mem::sizeof::<(bool, G1)>()!=0`, the function returns
+/// `AltBn128DeserializationError`.
 ///
 /// If `borsh::BorshSerialize` returns error during serialization, the function
 /// returns `AltBn128SerializationError`.///
@@ -238,11 +234,10 @@ pub fn alt_bn128_g1_multiexp(data: &[u8]) -> std::result::Result<Vec<u8>, ZeroPo
 /// let sum_result = base64::decode(sum_result_data).unwrap();
 /// let result = alt_bn128_g1_sum(&sum).unwrap();
 /// assert_eq!(sum_result, result);
-///
 /// ```
-pub fn alt_bn128_g1_sum(data: &[u8]) -> std::result::Result<Vec<u8>, ZeroPoolError> {
+pub fn alt_bn128_g1_sum(data: &[u8]) -> core::result::Result<Vec<u8>, ZeroPoolError> {
     let items = <Vec<(bool, WrapG1)>>::try_from_slice(data)
-        .map_err(|e| ZeroPoolError::AltBn128DeserializationError { msg: format!("{}", e) })?
+        .map_err(|e| ZeroPoolError::AltBn128DeserializationError)?
         .into_iter()
         .map(|e| (e.0, e.1 .0))
         .collect::<Vec<_>>();
@@ -257,7 +252,7 @@ pub fn alt_bn128_g1_sum(data: &[u8]) -> std::result::Result<Vec<u8>, ZeroPoolErr
     }
     let result = WrapG1(acc)
         .try_to_vec()
-        .map_err(|e| ZeroPoolError::AltBn128SerializationError { msg: format!("{}", e) })?;
+        .map_err(|e| ZeroPoolError::AltBn128SerializationError)?;
     Ok(result)
 }
 
@@ -266,20 +261,20 @@ pub fn alt_bn128_g1_sum(data: &[u8]) -> std::result::Result<Vec<u8>, ZeroPoolErr
 ///
 /// # Arguments
 ///
-/// * `data` - slice of (g1:G1, g2:G2), where
-///     G2 is Fr-ordered subgroup point (x:Fq2, y:Fq2) on alt_bn128 twist,
-///     alt_bn128 twist is Y^2 = X^3 + 3/(i+9) curve over Fq2
-///     Fq2 is complex field element (re: Fq, im: Fq)
-///     G1 is point (x:Fq, y:Fq) on alt_bn128,
-///     alt_bn128 is Y^2 = X^3 + 3 curve over Fq
-///     Fq is LE-serialized u256 number lesser than 21888242871839275222246405745257275088696311157297823662689037894645226208583
-///     Fr is LE-serialized u256 number lesser than 21888242871839275222246405745257275088548364400416034343698204186575808495617
+/// * `data` - slice of (g1:G1, g2:G2), where G2 is Fr-ordered subgroup point (x:Fq2, y:Fq2) on
+///   alt_bn128 twist, alt_bn128 twist is Y^2 = X^3 + 3/(i+9) curve over Fq2 Fq2 is complex field
+///   element (re: Fq, im: Fq) G1 is point (x:Fq, y:Fq) on alt_bn128, alt_bn128 is Y^2 = X^3 + 3
+///   curve over Fq Fq is LE-serialized u256 number lesser than
+///   21888242871839275222246405745257275088696311157297823662689037894645226208583 Fr is
+///   LE-serialized u256 number lesser than
+///   21888242871839275222246405745257275088548364400416034343698204186575808495617
 ///
 /// # Errors
 ///
 /// If point coordinates are not on curve, point is not in the subgroup, scalar
 /// is not in the field or data are wrong serialized, for example,
-/// `data.len()%std::mem::sizeof::<(G1,G2)>()!=0`, the function returns `AltBn128DeserializationError`.
+/// `data.len()%core::mem::sizeof::<(G1,G2)>()!=0`, the function returns
+/// `AltBn128DeserializationError`.
 ///
 /// If `borsh::BorshSerialize` returns error during serialization, the function
 /// returns `AltBn128SerializationError`.///
@@ -292,11 +287,10 @@ pub fn alt_bn128_g1_sum(data: &[u8]) -> std::result::Result<Vec<u8>, ZeroPoolErr
 /// let pairs = base64::decode(pairs_data).unwrap();
 /// let pairs_result = alt_bn128_pairing_check(&pairs).unwrap();
 /// assert!(pairs_result);
-///
 /// ```
-pub fn alt_bn128_pairing_check(data: &[u8]) -> std::result::Result<bool, ZeroPoolError> {
+pub fn alt_bn128_pairing_check(data: &[u8]) -> core::result::Result<bool, ZeroPoolError> {
     let items = <Vec<(WrapG1, WrapG2)>>::try_from_slice(data)
-        .map_err(|e| ZeroPoolError::AltBn128DeserializationError { msg: format!("{}", e) })?
+        .map_err(|e| ZeroPoolError::AltBn128DeserializationError)?
         .into_iter()
         .map(|e| (e.0 .0, e.1 .0))
         .collect::<Vec<_>>();
