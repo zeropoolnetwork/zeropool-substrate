@@ -1,13 +1,12 @@
-const { ApiPromise, ApiRx, WsProvider } = require('@polkadot/api');
-const { mnemonicGenerate, mnemonicValidate, cryptoWaitReady  } = require('@polkadot/util-crypto')
+const { first, switchMap, take, combineLatest, tap, of } = require('rxjs');
+const { ApiRx, WsProvider } = require('@polkadot/api');
+const { cryptoWaitReady  } = require('@polkadot/util-crypto')
 const { Keyring } = require('@polkadot/keyring')
-const { of, tap, first, from, switchMap, catchError } = require('rxjs');
+const { BN } = require('bn.js');
+
+let ALICE, BOB, CHARLIE, DAVE, EVE, FERDIE, FROM, TO, AMOUNT, FACTOR
 
 const keyring = new Keyring({type: 'sr25519'})  // init key store
-const AMOUNT = 100000
-let ALICE, BOB, CHARLIE, DAVE, EVE, FERDIE, FROM, TO
-
-
 const initAccounts = () => {
   // keys defined here: @polkadot/keyring/testing.js
   ALICE = keyring.addFromUri('//Alice', { name: 'Alice default' })
@@ -17,17 +16,33 @@ const initAccounts = () => {
   FERDIE = keyring.addFromUri('//Ferdie', { name: 'Alice default' })
 }
 
+const initAmounts = (api$) =>
+  api$.pipe(
+    tap((api) => {
+      FACTOR = new BN(10).pow(new BN(api.registry.chainDecimals));
+      AMOUNT = new BN(15).mul(FACTOR);
+    })
+  )
+  
+const balance = async (api, address) => {
+  const balance = await api.derive.balances.all(address).pipe(take(1)).toPromise()
+  const available = balance.availableBalance
+  
+  return available / FACTOR
+}
+
 const release = (api$) =>
   api$.pipe(
     switchMap(api =>
       api.query.system.account(FROM.address).pipe(
         first(),
-        switchMap(([nonce]) =>
+        switchMap(([nonce]) => combineLatest([
           api.tx.zeropool
             .release(AMOUNT)
             .sign(FROM, { nonce: nonce[1].words[0] })
-            .send()
-        ),
+            .send(),
+          of(api),
+        ])),
       )
     )
   )
@@ -40,21 +55,25 @@ const main = () => {
   new ApiRx({ provider: new WsProvider('ws://127.0.0.1:9944') })
     .isReady
     .pipe(
+      initAmounts,
       release,
     )
-    .subscribe((result) => {
+    .subscribe(([result, api]) => {
       if(result instanceof Error) {
         throw result
       }
       
       if (result.status.isInBlock) {
-        console.log('Successful lock of ' + AMOUNT + ' with hash ' + result.status.asInBlock.toHex());
+        console.log('Successful unlock of ' + AMOUNT / FACTOR + ' DOT with hash ' + result.status.asInBlock.toHex());
       } else {
         console.log('Status of transfer: ' + result.status.type)
 
         if (result.status.isFinalized) {
           console.log('Finalized block hash: ' + result.status.asFinalized.toHex())
-          process.exit()
+          balance(api, FROM.address).then(print => {
+            console.log(`Address ${FROM.address} (${FROM.meta.name}) has ${print} DOT`)
+            process.exit()
+          })
         }
       }
     
