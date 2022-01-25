@@ -1,18 +1,18 @@
 #![cfg_attr(not(feature = "std"), no_std)]
+#![allow(dead_code)]
 
 #[cfg(not(feature = "std"))]
 extern crate alloc;
 
-use crate::num::U256;
 use borsh::BorshDeserialize;
 use frame_support::traits::Currency;
 use maybestd::vec::Vec;
 pub use pallet::*;
+use sp_core::{hashing::keccak_256, U256};
 
 mod alt_bn128;
 mod error;
 mod maybestd;
-mod num;
 mod tx_decoder;
 mod verifier;
 
@@ -34,22 +34,10 @@ pub struct MerkleProof<const L: usize> {
     pub path: [bool; L],
 }
 
-// #[derive(Debug, BorshDeserialize)]
-// struct Transaction {
-//     nullifier: U256,
-//     out_commit: U256,
-//     transfer_index: U256,
-//     energy_amount: U256,
-//     token_amount: U256,
-//     transact_proof: [U256; 8],
-//     root_after: U256,
-//     tree_proof: [U256; 8],
-//     tx_type: TxType,
-//     memo: Vec<u8>,
-// }
-
 #[frame_support::pallet]
 pub mod pallet {
+    use crate::{tx_decoder::EvmTxDecoder, verifier::alt_bn128_groth16verify};
+
     use super::*;
     use frame_support::{
         pallet_prelude::*,
@@ -75,9 +63,17 @@ pub mod pallet {
     pub struct Pallet<T>(_);
 
     #[pallet::storage]
-    #[pallet::getter(fn get_balance)]
     pub type Balances<T> =
         StorageMap<_, Blake2_128Concat, <T as frame_system::Config>::AccountId, BalanceOf<T>>;
+
+    #[pallet::storage]
+    pub type Nullifiers<T> = StorageMap<_, Blake2_128Concat, U256, U256>;
+
+    #[pallet::storage]
+    pub type Roots<T> = StorageMap<_, Blake2_128Concat, U256, U256>;
+
+    #[pallet::storage]
+    pub type PoolIndex<T> = StorageValue<_, U256>;
 
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
@@ -86,12 +82,16 @@ pub mod pallet {
         Lock(T::AccountId, BalanceOf<T>),
         /// [who, amount]
         Release(T::AccountId, BalanceOf<T>),
+        Deposit,
+        Transfer,
+        Withdraw,
     }
 
     #[pallet::error]
     pub enum Error<T> {
         InsufficientBalance,
         InvalidTxFormat,
+        DoubleSpend,
     }
 
     impl<T: Config> Pallet<T> {
@@ -102,12 +102,47 @@ pub mod pallet {
 
     #[pallet::call]
     impl<T: Config> Pallet<T> {
-        // TODO: Try using SCALE codec instead of borsh
-        #[pallet::weight(10_000)]
+        // TODO: Use SCALE codec instead of borsh
+        #[pallet::weight(1000)]
         pub fn transact(origin: OriginFor<T>, data: Vec<u8>) -> DispatchResult {
             let who = ensure_signed(origin)?;
-            // let decoded =
-            //     Transaction::try_from_slice(&data).map_err(|_| Error::<T>::InvalidTxFormat)?;
+            let tx = EvmTxDecoder::new(data.as_slice());
+
+            let vk = (); // FIXME: load VK
+            let inputs = [];
+            let res = alt_bn128_groth16verify(&vk, &tx.transact_proof(), &inputs);
+
+            let hash = [tx.out_commit().encode()];
+            <Nullifiers<T>>::insert(tx.nullifier(), ());
+
+            // {
+            //     uint256 _pool_index = pool_index;
+
+            //     require(transfer_verifier.verifyProof(_transfer_pub(), _transfer_proof()), "bad
+            // transfer proof");     require(nullifiers[_transfer_nullifier()]==0,"
+            // doublespend detected");     require(_transfer_index() <= _pool_index,
+            // "transfer index out of bounds");     require(tree_verifier.
+            // verifyProof(_tree_pub(), _tree_proof()), "bad tree proof");
+
+            //     nullifiers[_transfer_nullifier()] =
+            // uint256(keccak256(abi.encodePacked(_transfer_out_commit(), _transfer_delta())));
+            //     _pool_index +=128;
+            //     roots[_pool_index] = _tree_root_after();
+            //     pool_index = _pool_index;
+            //     bytes memory message = _memo_message();
+            //     bytes32 message_hash = keccak256(message);
+            //     bytes32 _all_messages_hash = keccak256(abi.encodePacked(all_messages_hash,
+            // message_hash));     all_messages_hash = _all_messages_hash;
+            //     emit Message(_pool_index, _all_messages_hash, message);
+            // }
+
+            // uint256 fee = _memo_fee();
+            // int256 token_amount = _transfer_token_amount() + int256(fee);
+            // int256 energy_amount = _transfer_energy_amount();
+
+            // require(token_amount>=0 && energy_amount==0 && msg.value == 0, "incorrect deposit
+            // amounts"); token.safeTransferFrom(_deposit_spender(), address(this),
+            // uint256(token_amount) * denominator);
 
             Ok(())
         }

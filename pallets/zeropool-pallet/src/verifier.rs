@@ -1,14 +1,14 @@
 use crate::{
     error::ZeroPoolError,
     maybestd::{vec, vec::Vec},
-    num::U256,
 };
 use borsh::{BorshDeserialize, BorshSerialize};
+use sp_core::U256;
 
 pub type G1 = [U256; 2];
 pub type G2 = [U256; 4];
 
-#[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, Clone)]
 pub struct VK {
     pub alpha: G1,
     pub beta: G2,
@@ -17,7 +17,7 @@ pub struct VK {
     pub ic: Vec<G1>,
 }
 
-#[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, Clone)]
 pub struct Proof {
     pub a: G1,
     pub b: G2,
