@@ -5,14 +5,18 @@
 extern crate alloc;
 
 use borsh::BorshDeserialize;
+use ff_uint::Uint;
 use frame_support::traits::Currency;
 use maybestd::vec::Vec;
 pub use pallet::*;
-use sp_core::{hashing::keccak_256, U256};
+use sp_core::hashing::keccak_256;
+
+use crate::num::U256;
 
 mod alt_bn128;
 mod error;
 mod maybestd;
+mod num;
 mod tx_decoder;
 mod verifier;
 
@@ -36,7 +40,11 @@ pub struct MerkleProof<const L: usize> {
 
 #[frame_support::pallet]
 pub mod pallet {
-    use crate::{tx_decoder::EvmTxDecoder, verifier::alt_bn128_groth16verify};
+    use crate::{
+        error::ZeroPoolError,
+        tx_decoder::{EvmTxDecoder, TxType},
+        verifier::alt_bn128_groth16verify,
+    };
 
     use super::*;
     use frame_support::{
@@ -73,7 +81,10 @@ pub mod pallet {
     pub type Roots<T> = StorageMap<_, Blake2_128Concat, U256, U256>;
 
     #[pallet::storage]
-    pub type PoolIndex<T> = StorageValue<_, U256>;
+    pub type PoolIndex<T> = StorageValue<_, U256, ValueQuery>;
+
+    #[pallet::storage]
+    pub type AllMessagesHash<T> = StorageValue<_, U256, ValueQuery>;
 
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
@@ -82,9 +93,8 @@ pub mod pallet {
         Lock(T::AccountId, BalanceOf<T>),
         /// [who, amount]
         Release(T::AccountId, BalanceOf<T>),
-        Deposit,
-        Transfer,
-        Withdraw,
+        /// [pool_index, all_messages_hash, memo]
+        Message(U256, U256, Vec<u8>),
     }
 
     #[pallet::error]
@@ -92,6 +102,21 @@ pub mod pallet {
         InsufficientBalance,
         InvalidTxFormat,
         DoubleSpend,
+        IndexOutOfBounds,
+        AltBn128DeserializationError,
+        AltBn128SerializationError,
+        NotConsistentGroth16InputsError,
+    }
+
+    impl<T> From<ZeroPoolError> for Error<T> {
+        fn from(err: ZeroPoolError) -> Self {
+            match err {
+                ZeroPoolError::AltBn128DeserializationError => Error::AltBn128DeserializationError,
+                ZeroPoolError::AltBn128SerializationError => Error::AltBn128SerializationError,
+                ZeroPoolError::NotConsistentGroth16InputsError =>
+                    Error::NotConsistentGroth16InputsError,
+            }
+        }
     }
 
     impl<T: Config> Pallet<T> {
@@ -103,46 +128,93 @@ pub mod pallet {
     #[pallet::call]
     impl<T: Config> Pallet<T> {
         // TODO: Use SCALE codec instead of borsh
+        // TODO: Split into separate methods?
         #[pallet::weight(1000)]
         pub fn transact(origin: OriginFor<T>, data: Vec<u8>) -> DispatchResult {
             let who = ensure_signed(origin)?;
             let tx = EvmTxDecoder::new(data.as_slice());
 
+            // Verify transfer proof
             let vk = (); // FIXME: load VK
-            let inputs = [];
-            let res = alt_bn128_groth16verify(&vk, &tx.transact_proof(), &inputs);
+            let transact_inputs = [];
+            alt_bn128_groth16verify(&vk, &tx.transact_proof(), &transact_inputs)
+                .map_err(|err| err.into())?;
 
-            let hash = [tx.out_commit().encode()];
-            <Nullifiers<T>>::insert(tx.nullifier(), ());
+            if <Nullifiers<T>>::contains_key(tx.nullifier()) {
+                return Err(Error::DoubleSpend.into())
+            }
 
-            // {
-            //     uint256 _pool_index = pool_index;
+            let mut pool_index = <PoolIndex<T>>::get();
+            if tx.transfer_index() > pool_index {
+                return Err(Error::IndexOutOfBounds.into())
+            }
 
-            //     require(transfer_verifier.verifyProof(_transfer_pub(), _transfer_proof()), "bad
-            // transfer proof");     require(nullifiers[_transfer_nullifier()]==0,"
-            // doublespend detected");     require(_transfer_index() <= _pool_index,
-            // "transfer index out of bounds");     require(tree_verifier.
-            // verifyProof(_tree_pub(), _tree_proof()), "bad tree proof");
+            // Verify tree proof
+            let vk = (); // FIXME: load VK
+            let tree_inputs = [];
+            alt_bn128_groth16verify(&vk, &tx.tree_proof(), &tree_inputs)
+                .map_err(|err| err.into())?;
 
-            //     nullifiers[_transfer_nullifier()] =
-            // uint256(keccak256(abi.encodePacked(_transfer_out_commit(), _transfer_delta())));
-            //     _pool_index +=128;
-            //     roots[_pool_index] = _tree_root_after();
-            //     pool_index = _pool_index;
-            //     bytes memory message = _memo_message();
-            //     bytes32 message_hash = keccak256(message);
-            //     bytes32 _all_messages_hash = keccak256(abi.encodePacked(all_messages_hash,
-            // message_hash));     all_messages_hash = _all_messages_hash;
-            //     emit Message(_pool_index, _all_messages_hash, message);
-            // }
+            // Set the nullifier
+            let mut elements = [0u8; core::mem::size_of::<U256>() * 2]; // FIXME: Proper size
+            tx.out_commit().using_encoded(|data| {
+                elements[..core::mem::size_of::<U256>()].copy_from_slice(data);
+            });
+            tx.delta().using_encoded(|data| {
+                elements[core::mem::size_of::<U256>()..].copy_from_slice(data);
+            });
+            let hash = U256::from_big_endian(&keccak_256(&elements));
+            <Nullifiers<T>>::insert(tx.nullifier(), hash);
 
-            // uint256 fee = _memo_fee();
-            // int256 token_amount = _transfer_token_amount() + int256(fee);
-            // int256 energy_amount = _transfer_energy_amount();
+            pool_index = pool_index.unchecked_add(U256::from(128u8));
+            <PoolIndex<T>>::put(pool_index);
+            <Roots<T>>::insert(pool_index, tx.root_after());
 
-            // require(token_amount>=0 && energy_amount==0 && msg.value == 0, "incorrect deposit
-            // amounts"); token.safeTransferFrom(_deposit_spender(), address(this),
-            // uint256(token_amount) * denominator);
+            // Calculate all_messages_hash
+            let message_hash = keccak_256(tx.memo_message());
+            let mut hashes = [0u8; 32 * 2];
+            let all_messages_hash = <AllMessagesHash<T>>::get();
+            all_messages_hash.using_encoded(|data| hashes[..32].copy_from_slice(data));
+            hashes[32..].copy_from_slice(&message_hash);
+            let new_all_messages_hash = U256::from_big_endian(&keccak_256(&hashes));
+            <AllMessagesHash<T>>::put(new_all_messages_hash);
+
+            Self::deposit_event(Event::Message(
+                pool_index,
+                new_all_messages_hash,
+                tx.memo_message().to_owned(),
+            ));
+
+            // FIXME: use signed integers
+            let fee = tx.memo_fee();
+            let token_amount = tx.token_amount().unchecked_add(fee);
+            let energy_amount = tx.energy_amount();
+            // TODO: Use a denominator to prevent overflow
+            let native_amount = <BalanceOf<T>>::decode(&mut token_amount.encode().into()).into()?;
+
+            match tx.tx_type() {
+                TxType::Deposit => {
+                    // TODO: Check amounts
+                    T::Currency::transfer(
+                        &who,
+                        &Self::account_id(),
+                        native_amount,
+                        ExistenceRequirement::KeepAlive,
+                    )?;
+                },
+                TxType::Transfer => {
+                    // TODO: Check amounts
+                },
+                TxType::Withdraw => {
+                    // TODO: Check amounts
+                    T::Currency::transfer(
+                        &Self::account_id(),
+                        &who, // FIXME: get receiver from memo
+                        native_amount,
+                        ExistenceRequirement::KeepAlive,
+                    )?;
+                },
+            }
 
             Ok(())
         }
