@@ -1,5 +1,5 @@
 use ff_uint::{construct_uint, Uint};
-use frame_support::codec::{Decode, Encode, EncodeLike, Input, MaxEncodedLen, Output};
+use frame_support::codec::{Decode, Encode, EncodeLike, Input, MaxEncodedLen};
 use scale_info::TypeInfo;
 
 construct_uint! {

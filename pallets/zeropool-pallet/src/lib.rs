@@ -4,12 +4,16 @@
 #[cfg(not(feature = "std"))]
 extern crate alloc;
 
+use core::str::FromStr;
+
 use borsh::BorshDeserialize;
 use ff_uint::Uint;
 use frame_support::traits::Currency;
+use lazy_static::lazy_static;
 use maybestd::vec::Vec;
 pub use pallet::*;
-use sp_core::hashing::keccak_256;
+use sp_io::hashing::keccak_256;
+use verifier::VK;
 
 use crate::num::U256;
 
@@ -31,6 +35,18 @@ mod benchmarking;
 
 type AccountIdOf<T> = <T as frame_system::Config>::AccountId;
 type BalanceOf<T> = <<T as Config>::Currency as Currency<AccountIdOf<T>>>::Balance;
+
+const TRANSFER_VK_SRC: &[u8] = include_bytes!("../../../keys/transfer_verification_key.bin");
+const TREE_VK_SRC: &[u8] = include_bytes!("../../../keys/tree_update_verification_key.bin");
+
+lazy_static! {
+    static ref TRANSFER_VK: VK = VK::try_from_slice(TRANSFER_VK_SRC).unwrap();
+    static ref TREE_VK: VK = VK::try_from_slice(TREE_VK_SRC).unwrap();
+    static ref R: U256 = U256::from_str(
+        "21888242871839275222246405745257275088548364400416034343698204186575808495617"
+    )
+    .unwrap();
+}
 
 #[derive(Debug, BorshDeserialize)]
 pub struct MerkleProof<const L: usize> {
@@ -78,7 +94,7 @@ pub mod pallet {
     pub type Nullifiers<T> = StorageMap<_, Blake2_128Concat, U256, U256>;
 
     #[pallet::storage]
-    pub type Roots<T> = StorageMap<_, Blake2_128Concat, U256, U256>;
+    pub type Roots<T> = StorageMap<_, Blake2_128Concat, U256, U256, ValueQuery>;
 
     #[pallet::storage]
     pub type PoolIndex<T> = StorageValue<_, U256, ValueQuery>;
@@ -106,6 +122,9 @@ pub mod pallet {
         AltBn128DeserializationError,
         AltBn128SerializationError,
         NotConsistentGroth16InputsError,
+
+        // TODO: Find a way to transform codec errors into DispatchError
+        Deserialization,
     }
 
     impl<T> From<ZeroPoolError> for Error<T> {
@@ -134,26 +153,34 @@ pub mod pallet {
             let who = ensure_signed(origin)?;
             let tx = EvmTxDecoder::new(data.as_slice());
 
+            let message_hash = keccak_256(tx.memo_message());
+
             // Verify transfer proof
-            let vk = (); // FIXME: load VK
-            let transact_inputs = [];
-            alt_bn128_groth16verify(&vk, &tx.transact_proof(), &transact_inputs)
-                .map_err(|err| err.into())?;
+            // FIXME: delta + (_pool_id()<<(transfer_delta_size*8));
+            let transact_inputs = [
+                tx.root_after(),
+                tx.nullifier(),
+                tx.out_commit(),
+                tx.delta(),
+                U256::from_big_endian(&message_hash),
+            ];
+            alt_bn128_groth16verify(&*TRANSFER_VK, &tx.transact_proof(), &transact_inputs)
+                .map_err(|err| Into::<Error<T>>::into(err))?;
 
             if <Nullifiers<T>>::contains_key(tx.nullifier()) {
-                return Err(Error::DoubleSpend.into())
+                return Err(Error::<T>::DoubleSpend.into())
             }
 
             let mut pool_index = <PoolIndex<T>>::get();
             if tx.transfer_index() > pool_index {
-                return Err(Error::IndexOutOfBounds.into())
+                return Err(Error::<T>::IndexOutOfBounds.into())
             }
 
             // Verify tree proof
-            let vk = (); // FIXME: load VK
-            let tree_inputs = [];
-            alt_bn128_groth16verify(&vk, &tx.tree_proof(), &tree_inputs)
-                .map_err(|err| err.into())?;
+            let root_before = <Roots<T>>::get(pool_index);
+            let tree_inputs = [root_before, tx.root_after(), tx.out_commit()];
+            alt_bn128_groth16verify(&*TREE_VK, &tx.tree_proof(), &tree_inputs)
+                .map_err(|err| Into::<Error<T>>::into(err))?;
 
             // Set the nullifier
             let mut elements = [0u8; core::mem::size_of::<U256>() * 2]; // FIXME: Proper size
@@ -171,7 +198,6 @@ pub mod pallet {
             <Roots<T>>::insert(pool_index, tx.root_after());
 
             // Calculate all_messages_hash
-            let message_hash = keccak_256(tx.memo_message());
             let mut hashes = [0u8; 32 * 2];
             let all_messages_hash = <AllMessagesHash<T>>::get();
             all_messages_hash.using_encoded(|data| hashes[..32].copy_from_slice(data));
@@ -182,7 +208,7 @@ pub mod pallet {
             Self::deposit_event(Event::Message(
                 pool_index,
                 new_all_messages_hash,
-                tx.memo_message().to_owned(),
+                tx.memo_message().to_vec(),
             ));
 
             // FIXME: use signed integers
@@ -190,7 +216,9 @@ pub mod pallet {
             let token_amount = tx.token_amount().unchecked_add(fee);
             let energy_amount = tx.energy_amount();
             // TODO: Use a denominator to prevent overflow
-            let native_amount = <BalanceOf<T>>::decode(&mut token_amount.encode().into()).into()?;
+            let encoded_amount = token_amount.encode();
+            let native_amount = <BalanceOf<T>>::decode(&mut &encoded_amount[..])
+                .map_err(|_err| Into::<DispatchError>::into(Error::<T>::Deserialization))?;
 
             match tx.tx_type() {
                 TxType::Deposit => {
