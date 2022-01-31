@@ -65,7 +65,7 @@ pub mod pallet {
     use super::*;
     use frame_support::{
         pallet_prelude::*,
-        sp_runtime::traits::{AccountIdConversion, CheckedSub},
+        sp_runtime::traits::AccountIdConversion,
         traits::{Currency, ExistenceRequirement},
         PalletId,
     };
@@ -85,10 +85,6 @@ pub mod pallet {
     #[pallet::pallet]
     #[pallet::generate_store(pub(super) trait Store)]
     pub struct Pallet<T>(_);
-
-    #[pallet::storage]
-    pub type Balances<T> =
-        StorageMap<_, Blake2_128Concat, <T as frame_system::Config>::AccountId, BalanceOf<T>>;
 
     #[pallet::storage]
     pub type Nullifiers<T> = StorageMap<_, Blake2_128Concat, U256, U256>;
@@ -125,6 +121,7 @@ pub mod pallet {
 
         // TODO: Find a way to transform codec errors into DispatchError
         Deserialization,
+        IncorrectAmount,
     }
 
     impl<T> From<ZeroPoolError> for Error<T> {
@@ -148,17 +145,20 @@ pub mod pallet {
     impl<T: Config> Pallet<T> {
         // TODO: Use SCALE codec instead of borsh
         // TODO: Split into separate methods?
+        // TODO: Weight
         #[pallet::weight(1000)]
         pub fn transact(origin: OriginFor<T>, data: Vec<u8>) -> DispatchResult {
             let who = ensure_signed(origin)?;
             let tx = EvmTxDecoder::new(data.as_slice());
 
             let message_hash = keccak_256(tx.memo_message());
+            let mut pool_index = <PoolIndex<T>>::get();
+            let root_before = <Roots<T>>::get(pool_index);
 
             // Verify transfer proof
             // FIXME: delta + (_pool_id()<<(transfer_delta_size*8));
             let transact_inputs = [
-                tx.root_after(),
+                root_before,
                 tx.nullifier(),
                 tx.out_commit(),
                 tx.delta(),
@@ -171,13 +171,11 @@ pub mod pallet {
                 return Err(Error::<T>::DoubleSpend.into())
             }
 
-            let mut pool_index = <PoolIndex<T>>::get();
             if tx.transfer_index() > pool_index {
                 return Err(Error::<T>::IndexOutOfBounds.into())
             }
 
             // Verify tree proof
-            let root_before = <Roots<T>>::get(pool_index);
             let tree_inputs = [root_before, tx.root_after(), tx.out_commit()];
             alt_bn128_groth16verify(&*TREE_VK, &tx.tree_proof(), &tree_inputs)
                 .map_err(|err| Into::<Error<T>>::into(err))?;
@@ -222,7 +220,12 @@ pub mod pallet {
 
             match tx.tx_type() {
                 TxType::Deposit => {
-                    // TODO: Check amounts
+                    if token_amount > U256::MAX.unchecked_div(U256::from(2u32)) ||
+                        energy_amount != U256::ZERO
+                    {
+                        return Err(Error::<T>::IncorrectAmount.into())
+                    }
+
                     T::Currency::transfer(
                         &who,
                         &Self::account_id(),
@@ -230,11 +233,19 @@ pub mod pallet {
                         ExistenceRequirement::KeepAlive,
                     )?;
                 },
-                TxType::Transfer => {
-                    // TODO: Check amounts
-                },
+                TxType::Transfer =>
+                    if token_amount != U256::ZERO || energy_amount != U256::ZERO {
+                        return Err(Error::<T>::IncorrectAmount.into())
+                    },
                 TxType::Withdraw => {
-                    // TODO: Check amounts
+                    if token_amount < U256::MAX.unchecked_div(U256::from(2u32)) ||
+                        energy_amount < U256::MAX.unchecked_div(U256::from(2u32))
+                    {
+                        return Err(Error::<T>::IncorrectAmount.into())
+                    }
+
+                    // TODO: Voucher token
+
                     T::Currency::transfer(
                         &Self::account_id(),
                         &who, // FIXME: get receiver from memo
@@ -242,56 +253,9 @@ pub mod pallet {
                         ExistenceRequirement::KeepAlive,
                     )?;
                 },
+                // TODO: Fee for operator
             }
 
-            Ok(())
-        }
-
-        #[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1))]
-        pub fn lock(origin: OriginFor<T>, amount: BalanceOf<T>) -> DispatchResult {
-            let who = ensure_signed(origin)?;
-
-            let total = <Balances<T>>::get(who.clone())
-                .map(|balance| balance + amount)
-                .unwrap_or(amount);
-
-            <Balances<T>>::insert(who.clone(), total);
-
-            T::Currency::transfer(
-                &who,
-                &Self::account_id(),
-                amount,
-                ExistenceRequirement::KeepAlive,
-            )?;
-
-            Self::deposit_event(Event::Lock(who, amount));
-            Ok(())
-        }
-
-        #[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1))]
-        pub fn release(origin: OriginFor<T>, amount: BalanceOf<T>) -> DispatchResult {
-            let who = ensure_signed(origin)?;
-
-            if let Some(balance) = <Balances<T>>::get(who.clone()) {
-                let new_balance =
-                    balance.checked_sub(&amount).ok_or(Error::<T>::InsufficientBalance)?;
-                if new_balance == 0u32.into() {
-                    <Balances<T>>::remove(who.clone());
-                } else {
-                    <Balances<T>>::insert(who.clone(), new_balance);
-                }
-
-                T::Currency::transfer(
-                    &Self::account_id(),
-                    &who,
-                    amount,
-                    ExistenceRequirement::KeepAlive,
-                )?;
-            } else {
-                return Err(Error::<T>::InsufficientBalance.into())
-            }
-
-            Self::deposit_event(Event::Release(who, amount));
             Ok(())
         }
     }
