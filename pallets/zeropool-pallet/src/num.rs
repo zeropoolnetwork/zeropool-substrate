@@ -19,7 +19,7 @@ impl TypeInfo for U256 {
 
 impl Encode for U256 {
     fn using_encoded<R, F: FnOnce(&[u8]) -> R>(&self, f: F) -> R {
-        let mut bytes = self.to_little_endian();
+        let bytes = self.to_little_endian();
         bytes.using_encoded(f)
     }
 }

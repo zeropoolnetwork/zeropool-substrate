@@ -4,11 +4,13 @@ use crate::{
     num::U256,
 };
 use borsh::{BorshDeserialize, BorshSerialize};
+use frame_support::codec::{Decode, Encode};
+use scale_info::TypeInfo;
 
 pub type G1 = [U256; 2];
 pub type G2 = [U256; 4];
 
-#[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, Clone, BorshSerialize, BorshDeserialize, Encode, Decode, PartialEq, TypeInfo)]
 pub struct VK {
     pub alpha: G1,
     pub beta: G2,

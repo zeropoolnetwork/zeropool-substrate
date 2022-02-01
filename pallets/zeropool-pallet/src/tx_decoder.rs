@@ -65,7 +65,7 @@ impl<'a> EvmTxDecoder<'a> {
 
     #[inline]
     pub fn delta(&self) -> U256 {
-        let mut delta: [u8; DELTA_SIZE] =
+        let delta: [u8; DELTA_SIZE] =
             self.data[TRANSFER_INDEX..(TRANSFER_INDEX + DELTA_SIZE)].try_into().unwrap();
         U256::from_big_endian(&delta)
     }

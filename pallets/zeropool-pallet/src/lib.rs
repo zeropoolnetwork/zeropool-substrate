@@ -36,12 +36,7 @@ mod benchmarking;
 type AccountIdOf<T> = <T as frame_system::Config>::AccountId;
 type BalanceOf<T> = <<T as Config>::Currency as Currency<AccountIdOf<T>>>::Balance;
 
-const TRANSFER_VK_SRC: &[u8] = include_bytes!("../../../keys/transfer_verification_key.bin");
-const TREE_VK_SRC: &[u8] = include_bytes!("../../../keys/tree_update_verification_key.bin");
-
 lazy_static! {
-    static ref TRANSFER_VK: VK = VK::try_from_slice(TRANSFER_VK_SRC).unwrap();
-    static ref TREE_VK: VK = VK::try_from_slice(TREE_VK_SRC).unwrap();
     static ref R: U256 = U256::from_str(
         "21888242871839275222246405745257275088548364400416034343698204186575808495617"
     )
@@ -98,6 +93,12 @@ pub mod pallet {
     #[pallet::storage]
     pub type AllMessagesHash<T> = StorageValue<_, U256, ValueQuery>;
 
+    #[pallet::storage]
+    pub type TransferVk<T> = StorageValue<_, VK>;
+
+    #[pallet::storage]
+    pub type TreeVk<T> = StorageValue<_, VK>;
+
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
@@ -122,6 +123,9 @@ pub mod pallet {
         // TODO: Find a way to transform codec errors into DispatchError
         Deserialization,
         IncorrectAmount,
+
+        TransferVkNotSet,
+        TreeVkNotSet,
     }
 
     impl<T> From<ZeroPoolError> for Error<T> {
@@ -143,7 +147,27 @@ pub mod pallet {
 
     #[pallet::call]
     impl<T: Config> Pallet<T> {
-        // TODO: Use SCALE codec instead of borsh
+        #[pallet::weight(1000)]
+        pub fn set_transfer_vk(origin: OriginFor<T>, data: VK) -> DispatchResult {
+            let who = ensure_signed(origin)?;
+            // TODO: Ensure operator
+
+            <TransferVk<T>>::put(data);
+
+            Ok(())
+        }
+
+        #[pallet::weight(1000)]
+        pub fn set_tree_vk(origin: OriginFor<T>, data: VK) -> DispatchResult {
+            let who = ensure_signed(origin)?;
+            // TODO: Ensure operator
+
+            <TreeVk<T>>::put(data);
+
+            Ok(())
+        }
+
+        // TODO: Use SCALE codec for transaction data
         // TODO: Split into separate methods?
         // TODO: Weight
         #[pallet::weight(1000)]
@@ -156,6 +180,7 @@ pub mod pallet {
             let root_before = <Roots<T>>::get(pool_index);
 
             // Verify transfer proof
+            let transfer_vk = <TransferVk<T>>::get().ok_or(Error::<T>::TransferVkNotSet)?;
             // FIXME: delta + (_pool_id()<<(transfer_delta_size*8));
             let transact_inputs = [
                 root_before,
@@ -164,7 +189,7 @@ pub mod pallet {
                 tx.delta(),
                 U256::from_big_endian(&message_hash),
             ];
-            alt_bn128_groth16verify(&*TRANSFER_VK, &tx.transact_proof(), &transact_inputs)
+            alt_bn128_groth16verify(&transfer_vk, &tx.transact_proof(), &transact_inputs)
                 .map_err(|err| Into::<Error<T>>::into(err))?;
 
             if <Nullifiers<T>>::contains_key(tx.nullifier()) {
@@ -176,8 +201,9 @@ pub mod pallet {
             }
 
             // Verify tree proof
+            let tree_vk = <TreeVk<T>>::get().ok_or(Error::<T>::TreeVkNotSet)?;
             let tree_inputs = [root_before, tx.root_after(), tx.out_commit()];
-            alt_bn128_groth16verify(&*TREE_VK, &tx.tree_proof(), &tree_inputs)
+            alt_bn128_groth16verify(&tree_vk, &tx.tree_proof(), &tree_inputs)
                 .map_err(|err| Into::<Error<T>>::into(err))?;
 
             // Set the nullifier
