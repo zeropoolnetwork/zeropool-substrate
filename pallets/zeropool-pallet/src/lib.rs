@@ -20,7 +20,7 @@ use crate::num::U256;
 mod alt_bn128;
 mod error;
 mod maybestd;
-mod num;
+pub mod num;
 mod tx_decoder;
 mod verifier;
 
@@ -41,6 +41,7 @@ lazy_static! {
         "21888242871839275222246405745257275088548364400416034343698204186575808495617"
     )
     .unwrap();
+    static ref DENOMINATOR: U256 = U256::from(1000u64);
 }
 
 #[derive(Debug, BorshDeserialize)]
@@ -69,12 +70,19 @@ pub mod pallet {
     /// Configure the pallet by specifying the parameters and types on which it depends.
     #[pallet::config]
     pub trait Config: frame_system::Config {
-        /// Because this pallet emits events, it depends on the runtime's definition of an event.
         type Event: From<Event<Self>> + IsType<<Self as frame_system::Config>::Event>;
         #[pallet::constant]
         type PalletId: Get<PalletId>;
-        /// The staking balance.
         type Currency: Currency<Self::AccountId>;
+
+        #[pallet::constant]
+        type InitialOwner: Get<Self::AccountId>;
+
+        #[pallet::constant]
+        type PoolId: Get<U256>;
+
+        #[pallet::constant]
+        type FirstRoot: Get<U256>;
     }
 
     #[pallet::pallet]
@@ -84,8 +92,13 @@ pub mod pallet {
     #[pallet::storage]
     pub type Nullifiers<T> = StorageMap<_, Blake2_128Concat, U256, U256>;
 
+    #[pallet::type_value]
+    pub fn FirstRoot<T: Config>() -> U256 {
+        T::FirstRoot::get()
+    }
+
     #[pallet::storage]
-    pub type Roots<T> = StorageMap<_, Blake2_128Concat, U256, U256, ValueQuery>;
+    pub type Roots<T> = StorageMap<_, Blake2_128Concat, U256, U256, ValueQuery, FirstRoot<T>>;
 
     #[pallet::storage]
     pub type PoolIndex<T> = StorageValue<_, U256, ValueQuery>;
@@ -99,13 +112,20 @@ pub mod pallet {
     #[pallet::storage]
     pub type TreeVk<T> = StorageValue<_, VK>;
 
+    #[pallet::type_value]
+    pub fn DefaultOwner<T: Config>() -> T::AccountId {
+        T::InitialOwner::get()
+    }
+
+    #[pallet::storage]
+    pub type Owner<T: Config> = StorageValue<_, T::AccountId, ValueQuery, DefaultOwner<T>>;
+
+    #[pallet::storage]
+    pub type Operator<T: Config> = StorageValue<_, T::AccountId>;
+
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
-        /// [who, amount]
-        Lock(T::AccountId, BalanceOf<T>),
-        /// [who, amount]
-        Release(T::AccountId, BalanceOf<T>),
         /// [pool_index, all_messages_hash, memo]
         Message(U256, U256, Vec<u8>),
     }
@@ -126,6 +146,9 @@ pub mod pallet {
 
         TransferVkNotSet,
         TreeVkNotSet,
+
+        NotOwner,
+        NotOperator,
     }
 
     impl<T> From<ZeroPoolError> for Error<T> {
@@ -143,14 +166,53 @@ pub mod pallet {
         pub fn account_id() -> T::AccountId {
             T::PalletId::get().into_account()
         }
+
+        fn check_operator(origin: OriginFor<T>) -> Result<T::AccountId, DispatchError> {
+            let who = ensure_signed(origin)?;
+            let operator = <Operator<T>>::get().ok_or(Error::<T>::NotOperator)?;
+
+            if who != operator {
+                return Err(Error::<T>::NotOperator.into())
+            }
+
+            Ok(who)
+        }
+
+        fn check_owner(origin: OriginFor<T>) -> Result<T::AccountId, DispatchError> {
+            let who = ensure_signed(origin)?;
+            let owner = Owner::<T>::get();
+
+            if who != owner {
+                return Err(Error::<T>::NotOwner.into())
+            }
+
+            Ok(who)
+        }
     }
 
     #[pallet::call]
     impl<T: Config> Pallet<T> {
         #[pallet::weight(1000)]
+        pub fn set_owner(origin: OriginFor<T>, address: T::AccountId) -> DispatchResult {
+            Self::check_owner(origin)?;
+
+            <Operator<T>>::put(address);
+
+            Ok(())
+        }
+
+        #[pallet::weight(1000)]
+        pub fn set_operator(origin: OriginFor<T>, address: T::AccountId) -> DispatchResult {
+            Self::check_owner(origin)?;
+
+            <Operator<T>>::put(address);
+
+            Ok(())
+        }
+
+        #[pallet::weight(1000)]
         pub fn set_transfer_vk(origin: OriginFor<T>, data: VK) -> DispatchResult {
-            let who = ensure_signed(origin)?;
-            // TODO: Ensure operator
+            Self::check_owner(origin)?;
 
             <TransferVk<T>>::put(data);
 
@@ -159,7 +221,7 @@ pub mod pallet {
 
         #[pallet::weight(1000)]
         pub fn set_tree_vk(origin: OriginFor<T>, data: VK) -> DispatchResult {
-            let who = ensure_signed(origin)?;
+            Self::check_owner(origin)?;
             // TODO: Ensure operator
 
             <TreeVk<T>>::put(data);
@@ -172,7 +234,7 @@ pub mod pallet {
         // TODO: Weight
         #[pallet::weight(1000)]
         pub fn transact(origin: OriginFor<T>, data: Vec<u8>) -> DispatchResult {
-            let who = ensure_signed(origin)?;
+            let who = Self::check_operator(origin)?;
             let tx = EvmTxDecoder::new(data.as_slice());
 
             let message_hash = keccak_256(tx.memo_message());
@@ -181,12 +243,14 @@ pub mod pallet {
 
             // Verify transfer proof
             let transfer_vk = <TransferVk<T>>::get().ok_or(Error::<T>::TransferVkNotSet)?;
-            // FIXME: delta + (_pool_id()<<(transfer_delta_size*8));
+            const DELTA_SIZE: u32 = 256;
+            let pool_id = T::PoolId::get();
+            let delta = tx.delta().unchecked_add(pool_id.unchecked_shr(DELTA_SIZE));
             let transact_inputs = [
                 root_before,
                 tx.nullifier(),
                 tx.out_commit(),
-                tx.delta(),
+                delta,
                 U256::from_big_endian(&message_hash),
             ];
             alt_bn128_groth16verify(&transfer_vk, &tx.transact_proof(), &transact_inputs)
@@ -235,12 +299,11 @@ pub mod pallet {
                 tx.memo_message().to_vec(),
             ));
 
-            // FIXME: use signed integers
             let fee = tx.memo_fee();
-            let token_amount = tx.token_amount().unchecked_add(fee);
+            let token_amount = tx.token_amount().overflowing_add(fee).0;
             let energy_amount = tx.energy_amount();
-            // TODO: Use a denominator to prevent overflow
-            let encoded_amount = token_amount.encode();
+
+            let encoded_amount = (token_amount.unchecked_mul(*DENOMINATOR)).encode();
             let native_amount = <BalanceOf<T>>::decode(&mut &encoded_amount[..])
                 .map_err(|_err| Into::<DispatchError>::into(Error::<T>::Deserialization))?;
 
@@ -252,8 +315,9 @@ pub mod pallet {
                         return Err(Error::<T>::IncorrectAmount.into())
                     }
 
+                    // TODO: Recover address from the signature
                     T::Currency::transfer(
-                        &who,
+                        &who, // FIXME: get sender from memo
                         &Self::account_id(),
                         native_amount,
                         ExistenceRequirement::KeepAlive,
@@ -269,8 +333,6 @@ pub mod pallet {
                     {
                         return Err(Error::<T>::IncorrectAmount.into())
                     }
-
-                    // TODO: Voucher token
 
                     T::Currency::transfer(
                         &Self::account_id(),
