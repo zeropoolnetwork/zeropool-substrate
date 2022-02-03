@@ -4,9 +4,15 @@ use ff_uint::Uint;
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
 
+// TODO: Move away from the evm transaction format to something more native.
+
+// Sizes
 const NUM_SIZE: usize = 32;
 const PROOF_SIZE: usize = NUM_SIZE * 8;
 const DELTA_SIZE: usize = 28;
+const BALANCE_SIZE: usize = 8;
+const ADDRESS_SIZE: usize = 32;
+const SIGNATURE_SIZE: usize = 64;
 
 // Offsets
 // const SELECTOR: usize = 0;
@@ -21,6 +27,11 @@ const TREE_PROOF: usize = ROOT_AFTER + NUM_SIZE;
 const TX_TYPE: usize = TREE_PROOF + PROOF_SIZE;
 const MEMO_SIZE: usize = TX_TYPE + 2;
 const MEMO: usize = TX_TYPE + 2;
+const MEMO_FEE: usize = MEMO;
+const MEMO_NATIVE_AMOUNT: usize = MEMO_FEE + 8;
+const MEMO_ADDRESS: usize = MEMO_NATIVE_AMOUNT + 8;
+const MEMO_END: usize = MEMO + MEMO_SIZE;
+const DEPOSIT_SIGNATURE: usize = MEMO_END + ADDRESS_SIZE;
 
 #[derive(Debug, BorshDeserialize, FromPrimitive)]
 #[repr(u16)]
@@ -41,6 +52,11 @@ impl<'a> EvmTxDecoder<'a> {
     #[inline]
     pub fn nullifier(&self) -> U256 {
         U256::from_big_endian(&self.data[NULLIFIER..(NULLIFIER + NUM_SIZE)])
+    }
+
+    #[inline]
+    pub fn nullifier_bytes(&self) -> &[u8] {
+        &self.data[NULLIFIER..(NULLIFIER + NUM_SIZE)]
     }
 
     #[inline]
@@ -104,7 +120,27 @@ impl<'a> EvmTxDecoder<'a> {
 
     #[inline]
     pub fn memo_fee(&self) -> U256 {
-        U256::from_big_endian(&self.data[MEMO..(MEMO + NUM_SIZE)])
+        U256::from_big_endian(&self.data[MEMO_FEE..(MEMO_FEE + BALANCE_SIZE)])
+    }
+
+    #[inline]
+    pub fn memo_native_amount(&self) -> U256 {
+        U256::from_big_endian(&self.data[MEMO_NATIVE_AMOUNT..(MEMO_NATIVE_AMOUNT + BALANCE_SIZE)])
+    }
+
+    #[inline]
+    pub fn memo_address(&self) -> &[u8] {
+        &self.data[MEMO_ADDRESS..(MEMO_ADDRESS + ADDRESS_SIZE)]
+    }
+
+    #[inline]
+    pub fn deposit_address(&self) -> &[u8] {
+        &self.data[MEMO_END..(MEMO_END + ADDRESS_SIZE)]
+    }
+
+    #[inline]
+    pub fn deposit_signature(&self) -> &[u8] {
+        &self.data[DEPOSIT_SIGNATURE..(DEPOSIT_SIGNATURE + SIGNATURE_SIZE)]
     }
 }
 

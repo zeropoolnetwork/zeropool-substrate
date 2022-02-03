@@ -70,7 +70,7 @@ git = 'https://github.com/paritytech/substrate.git'
 tag = 'monthly-2021-12'
 version = '4.0.0-dev'
 
-[dev-dependencies.sp-runtime]
+[dependencies.sp-runtime]
 default-features = false
 git = 'https://github.com/paritytech/substrate.git'
 tag = 'monthly-2021-12'
@@ -94,6 +94,7 @@ std = [
     'ff-uint/std',
     'num-traits/std',
     'sp-core/std',
+    'sp-runtime/std',
 ]
 try-runtime = ['frame-support/try-runtime']
 borsh_support = ['ff-uint/borsh_support']

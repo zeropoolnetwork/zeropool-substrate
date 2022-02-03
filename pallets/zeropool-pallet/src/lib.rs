@@ -66,6 +66,8 @@ pub mod pallet {
         PalletId,
     };
     use frame_system::pallet_prelude::*;
+    use sp_core::crypto::Public;
+    use sp_runtime::traits::Verify;
 
     /// Configure the pallet by specifying the parameters and types on which it depends.
     #[pallet::config]
@@ -132,21 +134,19 @@ pub mod pallet {
 
     #[pallet::error]
     pub enum Error<T> {
-        InsufficientBalance,
-        InvalidTxFormat,
-        DoubleSpend,
-        IndexOutOfBounds,
         AltBn128DeserializationError,
         AltBn128SerializationError,
         NotConsistentGroth16InputsError,
 
-        // TODO: Find a way to transform codec errors into DispatchError
+        IndexOutOfBounds,
+        InsufficientBalance,
+        InvalidTxFormat,
+        DoubleSpend,
+        InvalidDepositSignature,
         Deserialization,
         IncorrectAmount,
-
         TransferVkNotSet,
         TreeVkNotSet,
-
         NotOwner,
         NotOperator,
     }
@@ -167,9 +167,17 @@ pub mod pallet {
             T::PalletId::get().into_account()
         }
 
+        fn operator() -> Result<T::AccountId, DispatchError> {
+            <Operator<T>>::get().ok_or(Error::<T>::NotOperator.into())
+        }
+
+        fn owner() -> T::AccountId {
+            <Owner<T>>::get()
+        }
+
         fn check_operator(origin: OriginFor<T>) -> Result<T::AccountId, DispatchError> {
             let who = ensure_signed(origin)?;
-            let operator = <Operator<T>>::get().ok_or(Error::<T>::NotOperator)?;
+            let operator = Self::operator()?;
 
             if who != operator {
                 return Err(Error::<T>::NotOperator.into())
@@ -180,7 +188,7 @@ pub mod pallet {
 
         fn check_owner(origin: OriginFor<T>) -> Result<T::AccountId, DispatchError> {
             let who = ensure_signed(origin)?;
-            let owner = Owner::<T>::get();
+            let owner = Self::owner();
 
             if who != owner {
                 return Err(Error::<T>::NotOwner.into())
@@ -222,7 +230,6 @@ pub mod pallet {
         #[pallet::weight(1000)]
         pub fn set_tree_vk(origin: OriginFor<T>, data: VK) -> DispatchResult {
             Self::check_owner(origin)?;
-            // TODO: Ensure operator
 
             <TreeVk<T>>::put(data);
 
@@ -234,7 +241,7 @@ pub mod pallet {
         // TODO: Weight
         #[pallet::weight(1000)]
         pub fn transact(origin: OriginFor<T>, data: Vec<u8>) -> DispatchResult {
-            let who = Self::check_operator(origin)?;
+            let operator = Self::check_operator(origin)?;
             let tx = EvmTxDecoder::new(data.as_slice());
 
             let message_hash = keccak_256(tx.memo_message());
@@ -307,6 +314,10 @@ pub mod pallet {
             let native_amount = <BalanceOf<T>>::decode(&mut &encoded_amount[..])
                 .map_err(|_err| Into::<DispatchError>::into(Error::<T>::Deserialization))?;
 
+            let encoded_fee = (fee.unchecked_mul(*DENOMINATOR)).encode();
+            let native_fee = <BalanceOf<T>>::decode(&mut &encoded_fee[..])
+                .map_err(|_err| Into::<DispatchError>::into(Error::<T>::Deserialization))?;
+
             match tx.tx_type() {
                 TxType::Deposit => {
                     if token_amount > U256::MAX.unchecked_div(U256::from(2u32)) ||
@@ -315,9 +326,25 @@ pub mod pallet {
                         return Err(Error::<T>::IncorrectAmount.into())
                     }
 
-                    // TODO: Recover address from the signature
+                    let src = T::AccountId::decode(&mut tx.deposit_address())
+                        .map_err(|_err| Into::<DispatchError>::into(Error::<T>::Deserialization))?;
+
+                    let sig_result =
+                        match sp_core::ed25519::Signature::try_from(tx.deposit_signature()) {
+                            Ok(signature) => {
+                                let signer =
+                                    sp_core::ed25519::Public::from_slice(tx.deposit_address());
+                                signature.verify(tx.nullifier_bytes(), &signer)
+                            },
+                            _ => false,
+                        };
+
+                    if !sig_result {
+                        return Err(Error::<T>::InvalidDepositSignature.into())
+                    }
+
                     T::Currency::transfer(
-                        &who, // FIXME: get sender from memo
+                        &src,
                         &Self::account_id(),
                         native_amount,
                         ExistenceRequirement::KeepAlive,
@@ -334,14 +361,25 @@ pub mod pallet {
                         return Err(Error::<T>::IncorrectAmount.into())
                     }
 
+                    let dest = T::AccountId::decode(&mut tx.memo_address())
+                        .map_err(|_err| Into::<DispatchError>::into(Error::<T>::Deserialization))?;
+
                     T::Currency::transfer(
                         &Self::account_id(),
-                        &who, // FIXME: get receiver from memo
-                        native_amount,
+                        &dest,
+                        native_amount, // FIXME: flip the sign
                         ExistenceRequirement::KeepAlive,
                     )?;
                 },
-                // TODO: Fee for operator
+            }
+
+            if fee > U256::ZERO {
+                T::Currency::transfer(
+                    &Self::account_id(),
+                    &operator,
+                    native_fee, // FIXME: flip the sign
+                    ExistenceRequirement::KeepAlive,
+                )?;
             }
 
             Ok(())
