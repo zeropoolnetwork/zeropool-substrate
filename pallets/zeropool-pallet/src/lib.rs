@@ -278,7 +278,7 @@ pub mod pallet {
                 .map_err(|err| Into::<Error<T>>::into(err))?;
 
             // Set the nullifier
-            let mut elements = [0u8; core::mem::size_of::<U256>() * 2]; // FIXME: Proper size
+            let mut elements = [0u8; core::mem::size_of::<U256>() * 2];
             tx.out_commit().using_encoded(|data| {
                 elements[..core::mem::size_of::<U256>()].copy_from_slice(data);
             });
@@ -310,14 +310,6 @@ pub mod pallet {
             let token_amount = tx.token_amount().overflowing_add(fee).0;
             let energy_amount = tx.energy_amount();
 
-            let encoded_amount = (token_amount.unchecked_mul(*DENOMINATOR)).encode();
-            let native_amount = <BalanceOf<T>>::decode(&mut &encoded_amount[..])
-                .map_err(|_err| Into::<DispatchError>::into(Error::<T>::Deserialization))?;
-
-            let encoded_fee = (fee.unchecked_mul(*DENOMINATOR)).encode();
-            let native_fee = <BalanceOf<T>>::decode(&mut &encoded_fee[..])
-                .map_err(|_err| Into::<DispatchError>::into(Error::<T>::Deserialization))?;
-
             match tx.tx_type() {
                 TxType::Deposit => {
                     if token_amount > U256::MAX.unchecked_div(U256::from(2u32)) ||
@@ -343,6 +335,10 @@ pub mod pallet {
                         return Err(Error::<T>::InvalidDepositSignature.into())
                     }
 
+                    let encoded_amount = (token_amount.unchecked_mul(*DENOMINATOR)).encode();
+                    let native_amount = <BalanceOf<T>>::decode(&mut &encoded_amount[..])
+                        .map_err(|_err| Into::<DispatchError>::into(Error::<T>::Deserialization))?;
+
                     T::Currency::transfer(
                         &src,
                         &Self::account_id(),
@@ -364,20 +360,29 @@ pub mod pallet {
                     let dest = T::AccountId::decode(&mut tx.memo_address())
                         .map_err(|_err| Into::<DispatchError>::into(Error::<T>::Deserialization))?;
 
+                    let encoded_amount =
+                        (token_amount.unchecked_mul(*DENOMINATOR).overflowing_neg().0).encode();
+                    let native_amount = <BalanceOf<T>>::decode(&mut &encoded_amount[..])
+                        .map_err(|_err| Into::<DispatchError>::into(Error::<T>::Deserialization))?;
+
                     T::Currency::transfer(
                         &Self::account_id(),
                         &dest,
-                        native_amount, // FIXME: flip the sign
+                        native_amount,
                         ExistenceRequirement::KeepAlive,
                     )?;
                 },
             }
 
             if fee > U256::ZERO {
+                let encoded_fee = (fee.unchecked_mul(*DENOMINATOR).overflowing_neg().0).encode();
+                let native_fee = <BalanceOf<T>>::decode(&mut &encoded_fee[..])
+                    .map_err(|_err| Into::<DispatchError>::into(Error::<T>::Deserialization))?;
+
                 T::Currency::transfer(
                     &Self::account_id(),
                     &operator,
-                    native_fee, // FIXME: flip the sign
+                    native_fee,
                     ExistenceRequirement::KeepAlive,
                 )?;
             }
