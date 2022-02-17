@@ -41,6 +41,7 @@ pub use sp_runtime::BuildStorage;
 pub use sp_runtime::{Perbill, Permill};
 
 pub use zeropool_pallet;
+use zeropool_pallet::num::{Uint, U256};
 
 /// An index to a block.
 pub type BlockNumber = u32;
@@ -275,12 +276,19 @@ impl pallet_sudo::Config for Runtime {
 
 parameter_types! {
     pub const ZeropoolPalletId: PalletId = PalletId(*b"zeropool");
+    pub const PoolId: U256 = U256::ZERO;
+    pub const FirstRoot: U256 = U256::from_const_str(b"11469701942666298368112882412133877458305516134926649826543144744382391691533");
+    // Seed phrase: test test test test test test test test test test test junk
+    pub const InitialOwner: AccountId = AccountId::new(hex_literal::hex!("d000ac5048ae858aca2e6aa43e00661562a47026fe88ff83992430204a159752"));
 }
 
 impl zeropool_pallet::Config for Runtime {
     type Event = Event;
     type PalletId = ZeropoolPalletId;
     type Currency = Balances;
+    type InitialOwner = ();
+    type PoolId = PoolId;
+    type FirstRoot = FirstRoot;
 }
 
 // Create the runtime by composing the FRAME pallets that were previously configured.
