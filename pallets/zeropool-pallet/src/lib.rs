@@ -14,6 +14,7 @@ use maybestd::vec::Vec;
 pub use pallet::*;
 use sp_io::hashing::keccak_256;
 use verifier::VK;
+use sp_runtime::traits::Hash;
 
 use crate::num::U256;
 
@@ -300,11 +301,24 @@ pub mod pallet {
             let new_all_messages_hash = U256::from_big_endian(&keccak_256(&hashes));
             <AllMessagesHash<T>>::put(new_all_messages_hash);
 
-            Self::deposit_event(Event::Message(
+            // TODO: Find a less irritating way to created an indexed event.
+            let event = Event::Message(
                 pool_index,
                 new_all_messages_hash,
                 tx.memo_message().to_vec(),
-            ));
+            );
+
+            let event = <
+                <T as Config>::Event as
+                From<Event<T>>
+            >::from(event);
+
+            let event = <
+                <T as Config>::Event as
+                Into<<T as frame_system::Config>::Event>
+            >::into(event);
+
+            frame_system::Pallet::<T>::deposit_event_indexed(&[T::Hashing::hash(b"ZeropoolMessage")], event);
 
             let fee = tx.memo_fee();
             let token_amount = tx.token_amount().overflowing_add(fee).0;
