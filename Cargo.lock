@@ -1403,19 +1403,22 @@ dependencies = [
 
 [[package]]
 name = "ff-uint"
-version = "0.2.2"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b78347d3cd1ac0244e8e5244e94762005847506c2aed9608f5b04d756c357a65"
+checksum = "ecf8faaf3cb97a74ce279dd523fe61d467600e3faee3bee8d4639c29ae4f7a93"
 dependencies = [
  "borsh",
  "byteorder",
  "concat-idents",
  "crunchy",
  "ff-uint_derive",
+ "parity-scale-codec",
+ "parity-scale-codec-derive",
  "rand 0.7.3",
  "rand_core 0.5.1",
  "ref-cast",
  "rustc-hex",
+ "scale-info",
  "seedbox",
  "serde",
  "static_assertions",
@@ -1423,9 +1426,9 @@ dependencies = [
 
 [[package]]
 name = "ff-uint_derive"
-version = "0.2.2"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2399412eb589bfc33baa61a777e03fdc23fe7a995f9100f9587efcae0a18b61d"
+checksum = "be72cc249edaa75ad09bbe22b596efdc8715acc553f0d9ffdef271cdcea44e86"
 dependencies = [
  "num-bigint 0.3.3",
  "num-integer",
