@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+
+docker build -t voidxnull/zeropool-substrate-node . && \
+docker push voidxnull/zeropool-substrate-node
