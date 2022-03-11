@@ -16,7 +16,7 @@ use sp_io::hashing::keccak_256;
 use sp_runtime::traits::Hash;
 use verifier::VK;
 
-use crate::num::U256;
+use crate::num::{NativeU256, U256};
 
 mod alt_bn128;
 mod error;
@@ -82,10 +82,10 @@ pub mod pallet {
         type InitialOwner: Get<Self::AccountId>;
 
         #[pallet::constant]
-        type PoolId: Get<U256>;
+        type PoolId: Get<NativeU256>;
 
         #[pallet::constant]
-        type FirstRoot: Get<U256>;
+        type FirstRoot: Get<NativeU256>;
     }
 
     #[pallet::pallet]
@@ -93,21 +93,22 @@ pub mod pallet {
     pub struct Pallet<T>(_);
 
     #[pallet::storage]
-    pub type Nullifiers<T> = StorageMap<_, Blake2_128Concat, U256, U256>;
+    pub type Nullifiers<T> = StorageMap<_, Blake2_128Concat, NativeU256, NativeU256>;
 
     #[pallet::type_value]
-    pub fn FirstRoot<T: Config>() -> U256 {
+    pub fn FirstRoot<T: Config>() -> NativeU256 {
         T::FirstRoot::get()
     }
 
     #[pallet::storage]
-    pub type Roots<T> = StorageMap<_, Blake2_128Concat, U256, U256, ValueQuery, FirstRoot<T>>;
+    pub type Roots<T> =
+        StorageMap<_, Blake2_128Concat, NativeU256, NativeU256, ValueQuery, FirstRoot<T>>;
 
     #[pallet::storage]
-    pub type PoolIndex<T> = StorageValue<_, U256, ValueQuery>;
+    pub type PoolIndex<T> = StorageValue<_, NativeU256, ValueQuery>;
 
     #[pallet::storage]
-    pub type AllMessagesHash<T> = StorageValue<_, U256, ValueQuery>;
+    pub type AllMessagesHash<T> = StorageValue<_, NativeU256, ValueQuery>;
 
     #[pallet::storage]
     pub type TransferVk<T> = StorageValue<_, VK>;
@@ -130,7 +131,7 @@ pub mod pallet {
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
         /// [pool_index, all_messages_hash, memo]
-        Message(U256, U256, Vec<u8>),
+        Message(NativeU256, NativeU256, Vec<u8>),
         TransferVkSet,
         TreeVkSet,
         OperatorSet(T::AccountId),
@@ -258,17 +259,17 @@ pub mod pallet {
             let tx = EvmTxDecoder::new(data.as_slice());
 
             let message_hash = keccak_256(tx.memo_message());
-            let mut pool_index = <PoolIndex<T>>::get();
-            let root_before = <Roots<T>>::get(pool_index);
+            let mut pool_index: U256 = <PoolIndex<T>>::get().into();
+            let root_before: U256 = <Roots<T>>::get::<NativeU256>(pool_index.into()).into();
 
             // Verify transfer proof
             let transfer_vk = <TransferVk<T>>::get().ok_or(Error::<T>::TransferVkNotSet)?;
             const DELTA_SIZE: u32 = 256;
-            let pool_id = T::PoolId::get();
+            let pool_id: U256 = T::PoolId::get().into();
             let delta = tx.delta().unchecked_add(pool_id.unchecked_shr(DELTA_SIZE));
             let transact_inputs = [
                 root_before,
-                tx.nullifier(),
+                tx.nullifier().into(),
                 tx.out_commit(),
                 delta,
                 U256::from_big_endian(&message_hash),
@@ -276,11 +277,11 @@ pub mod pallet {
             alt_bn128_groth16verify(&transfer_vk, &tx.transact_proof(), &transact_inputs)
                 .map_err(|err| Into::<Error<T>>::into(err))?;
 
-            if <Nullifiers<T>>::contains_key(tx.nullifier()) {
+            if <Nullifiers<T>>::contains_key::<NativeU256>(tx.nullifier().into()) {
                 return Err(Error::<T>::DoubleSpend.into())
             }
 
-            if tx.transfer_index() > pool_index {
+            if tx.transfer_index() > pool_index.into() {
                 return Err(Error::<T>::IndexOutOfBounds.into())
             }
 
@@ -299,11 +300,11 @@ pub mod pallet {
                 elements[core::mem::size_of::<U256>()..].copy_from_slice(data);
             });
             let hash = U256::from_big_endian(&keccak_256(&elements));
-            <Nullifiers<T>>::insert(tx.nullifier(), hash);
+            <Nullifiers<T>>::insert::<NativeU256, NativeU256>(tx.nullifier().into(), hash.into());
 
-            pool_index = pool_index.unchecked_add(U256::from(128u8));
-            <PoolIndex<T>>::put(pool_index);
-            <Roots<T>>::insert(pool_index, tx.root_after());
+            pool_index = U256::from(pool_index).unchecked_add(U256::from(128u8));
+            <PoolIndex<T>>::put::<NativeU256>(pool_index.into());
+            <Roots<T>>::insert::<NativeU256, NativeU256>(pool_index.into(), tx.root_after().into());
 
             // Calculate all_messages_hash
             let mut hashes = [0u8; 32 * 2];
@@ -311,11 +312,14 @@ pub mod pallet {
             all_messages_hash.using_encoded(|data| hashes[..32].copy_from_slice(data));
             hashes[32..].copy_from_slice(&message_hash);
             let new_all_messages_hash = U256::from_big_endian(&keccak_256(&hashes));
-            <AllMessagesHash<T>>::put(new_all_messages_hash);
+            <AllMessagesHash<T>>::put::<NativeU256>(new_all_messages_hash.into());
 
             // TODO: Find a less irritating way to created an indexed event.
-            let event =
-                Event::Message(pool_index, new_all_messages_hash, tx.memo_message().to_vec());
+            let event = Event::Message(
+                pool_index.into(),
+                new_all_messages_hash.into(),
+                tx.memo_message().to_vec(),
+            );
 
             let event = <<T as Config>::Event as From<Event<T>>>::from(event);
 

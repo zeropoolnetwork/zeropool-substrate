@@ -1,5 +1,6 @@
 use ff_uint::construct_uint;
 pub use ff_uint::Uint;
+pub use sp_core::U256 as NativeU256;
 
 construct_uint! {
     pub struct _U256(4);
@@ -7,8 +8,20 @@ construct_uint! {
 
 pub type U256 = _U256;
 
-impl _U256 {
-    pub const fn from_const_str(bytes: &[u8]) -> _U256 {
+impl From<NativeU256> for U256 {
+    fn from(num: NativeU256) -> Self {
+        _U256(num.0)
+    }
+}
+
+impl From<U256> for NativeU256 {
+    fn from(num: U256) -> Self {
+        NativeU256(num.0)
+    }
+}
+
+impl U256 {
+    pub const fn from_const_str(bytes: &[u8]) -> U256 {
         let mut i: usize = 0;
         while i < bytes.len() {
             let b = bytes[i];
@@ -19,7 +32,7 @@ impl _U256 {
             i += 1;
         }
 
-        let mut res = _U256::ZERO;
+        let mut res = U256::ZERO;
 
         let mut i: usize = 0;
         while i < bytes.len() {
@@ -42,13 +55,13 @@ impl _U256 {
     }
 }
 
-const fn uint_from_u64(v: u64) -> _U256 {
+const fn uint_from_u64(v: u64) -> U256 {
     let mut ret = [0; 4];
     ret[0] = v;
     _U256(ret)
 }
 
-const fn overflowing_mul_u64(mut lhs: _U256, rhs: u64) -> (_U256, u64) {
+const fn overflowing_mul_u64(mut lhs: U256, rhs: u64) -> (U256, u64) {
     let mut carry = 0u64;
 
     let mut i = 0;
@@ -71,7 +84,7 @@ const fn split_u128(a: u128) -> (u64, u64) {
     ((a >> 64) as _, (a & 0xFFFFFFFFFFFFFFFF) as _)
 }
 
-const fn overflowing_add(lhs: _U256, rhs: _U256) -> (_U256, bool) {
+const fn overflowing_add(lhs: U256, rhs: U256) -> (U256, bool) {
     let _U256(ref me) = lhs;
     let _U256(ref you) = rhs;
 
