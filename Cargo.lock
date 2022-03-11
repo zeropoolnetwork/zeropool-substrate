@@ -3691,6 +3691,8 @@ dependencies = [
  "pallet-timestamp",
  "pallet-transaction-payment",
  "pallet-transaction-payment-rpc-runtime-api",
+ "pallet-utility",
+ "pallet-zeropool",
  "parity-scale-codec",
  "scale-info",
  "sp-api",
@@ -3705,7 +3707,6 @@ dependencies = [
  "sp-transaction-pool",
  "sp-version",
  "substrate-wasm-builder",
- "zeropool-pallet",
 ]
 
 [[package]]
@@ -4081,6 +4082,42 @@ dependencies = [
  "parity-scale-codec",
  "sp-api",
  "sp-runtime",
+]
+
+[[package]]
+name = "pallet-utility"
+version = "4.0.0-dev"
+source = "git+https://github.com/paritytech/substrate.git?tag=monthly-2021-12#b6c1c1bcfa5d831bfd1f278064d7af757f9b38f5"
+dependencies = [
+ "frame-support",
+ "frame-system",
+ "parity-scale-codec",
+ "scale-info",
+ "sp-core",
+ "sp-io",
+ "sp-runtime",
+ "sp-std",
+]
+
+[[package]]
+name = "pallet-zeropool"
+version = "4.0.0-dev"
+dependencies = [
+ "borsh",
+ "ff-uint",
+ "frame-benchmarking",
+ "frame-support",
+ "frame-system",
+ "lazy_static",
+ "num-derive",
+ "num-traits",
+ "pallet-balances",
+ "parity-scale-codec",
+ "scale-info",
+ "sp-core",
+ "sp-io",
+ "sp-runtime",
+ "zeropool-bn",
 ]
 
 [[package]]
@@ -6015,9 +6052,9 @@ dependencies = [
 
 [[package]]
 name = "serde_json"
-version = "1.0.78"
+version = "1.0.79"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d23c1ba4cf0efd44be32017709280b32d1cea5c3f1275c3b6d9e8bc54f758085"
+checksum = "8e8d9fa5c3b304765ce1fd9c4c8a3de2c8db365a5b91be52f186efc675681d95"
 dependencies = [
  "itoa 1.0.1",
  "ryu",
@@ -8071,29 +8108,6 @@ dependencies = [
  "lazy_static",
  "rand 0.8.4",
  "rustc-hex",
-]
-
-[[package]]
-name = "zeropool-pallet"
-version = "4.0.0-dev"
-dependencies = [
- "borsh",
- "ff-uint",
- "frame-benchmarking",
- "frame-support",
- "frame-system",
- "lazy_static",
- "num-derive",
- "num-traits",
- "pallet-balances",
- "parity-scale-codec",
- "scale-info",
- "serde",
- "serde_json",
- "sp-core",
- "sp-io",
- "sp-runtime",
- "zeropool-bn",
 ]
 
 [[package]]

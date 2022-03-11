@@ -13,8 +13,8 @@ use lazy_static::lazy_static;
 use maybestd::vec::Vec;
 pub use pallet::*;
 use sp_io::hashing::keccak_256;
-use verifier::VK;
 use sp_runtime::traits::Hash;
+use verifier::VK;
 
 use crate::num::U256;
 
@@ -131,6 +131,9 @@ pub mod pallet {
     pub enum Event<T: Config> {
         /// [pool_index, all_messages_hash, memo]
         Message(U256, U256, Vec<u8>),
+        TransferVkSet,
+        TreeVkSet,
+        OperatorSet(T::AccountId),
     }
 
     #[pallet::error]
@@ -214,30 +217,39 @@ pub mod pallet {
         pub fn set_operator(origin: OriginFor<T>, address: T::AccountId) -> DispatchResult {
             Self::check_owner(origin)?;
 
-            <Operator<T>>::put(address);
+            <Operator<T>>::put(address.clone());
+
+            Self::deposit_event(Event::OperatorSet(address));
 
             Ok(())
         }
 
         #[pallet::weight(1000)]
-        pub fn set_transfer_vk(origin: OriginFor<T>, data: VK) -> DispatchResult {
+        pub fn set_transfer_vk(origin: OriginFor<T>, data: Vec<u8>) -> DispatchResult {
             Self::check_owner(origin)?;
 
-            <TransferVk<T>>::put(data);
+            let vk = VK::try_from_slice(&data)
+                .map_err(|_err| Into::<DispatchError>::into(Error::<T>::Deserialization))?;
+            <TransferVk<T>>::put(vk);
+
+            Self::deposit_event(Event::TransferVkSet);
 
             Ok(())
         }
 
         #[pallet::weight(1000)]
-        pub fn set_tree_vk(origin: OriginFor<T>, data: VK) -> DispatchResult {
+        pub fn set_tree_vk(origin: OriginFor<T>, data: Vec<u8>) -> DispatchResult {
             Self::check_owner(origin)?;
 
-            <TreeVk<T>>::put(data);
+            let vk = VK::try_from_slice(&data)
+                .map_err(|_err| Into::<DispatchError>::into(Error::<T>::Deserialization))?;
+            <TreeVk<T>>::put(vk);
+
+            Self::deposit_event(Event::TreeVkSet);
 
             Ok(())
         }
 
-        // TODO: Use SCALE codec for transaction data
         // TODO: Split into separate methods?
         // TODO: Weight
         #[pallet::weight(1000)]
@@ -302,23 +314,18 @@ pub mod pallet {
             <AllMessagesHash<T>>::put(new_all_messages_hash);
 
             // TODO: Find a less irritating way to created an indexed event.
-            let event = Event::Message(
-                pool_index,
-                new_all_messages_hash,
-                tx.memo_message().to_vec(),
+            let event =
+                Event::Message(pool_index, new_all_messages_hash, tx.memo_message().to_vec());
+
+            let event = <<T as Config>::Event as From<Event<T>>>::from(event);
+
+            let event =
+                <<T as Config>::Event as Into<<T as frame_system::Config>::Event>>::into(event);
+
+            frame_system::Pallet::<T>::deposit_event_indexed(
+                &[T::Hashing::hash(b"ZeropoolMessage")],
+                event,
             );
-
-            let event = <
-                <T as Config>::Event as
-                From<Event<T>>
-            >::from(event);
-
-            let event = <
-                <T as Config>::Event as
-                Into<<T as frame_system::Config>::Event>
-            >::into(event);
-
-            frame_system::Pallet::<T>::deposit_event_indexed(&[T::Hashing::hash(b"ZeropoolMessage")], event);
 
             let fee = tx.memo_fee();
             let token_amount = tx.token_amount().overflowing_add(fee).0;

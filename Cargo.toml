@@ -1,8 +1,9 @@
 [workspace]
 members = [
     'node',
-    'pallets/zeropool-pallet',
+    'pallets/pallet-zeropool',
     'runtime',
+#    'tools/vk-converter', # breaks the project
 ]
 [profile.release]
 panic = 'unwind'

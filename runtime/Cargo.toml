@@ -12,9 +12,9 @@ repository = 'https://github.com/substrate-developer-hub/substrate-node-template
 [package.metadata.docs.rs]
 targets = ['x86_64-unknown-linux-gnu']
 
-[dependencies.zeropool-pallet]
+[dependencies.pallet-zeropool]
 default-features = false
-path = '../pallets/zeropool-pallet'
+path = '../pallets/pallet-zeropool'
 version = '4.0.0-dev'
 features = ['borsh_support', 'scale_support']
 
@@ -95,6 +95,12 @@ tag = 'monthly-2021-12'
 version = '4.0.0-dev'
 
 [dependencies.pallet-sudo]
+default-features = false
+git = 'https://github.com/paritytech/substrate.git'
+tag = 'monthly-2021-12'
+version = '4.0.0-dev'
+
+[dependencies.pallet-utility]
 default-features = false
 git = 'https://github.com/paritytech/substrate.git'
 tag = 'monthly-2021-12'
@@ -197,7 +203,7 @@ runtime-benchmarks = [
     'frame-system-benchmarking',
     'frame-system/runtime-benchmarks',
     'pallet-balances/runtime-benchmarks',
-    'zeropool-pallet/runtime-benchmarks',
+    'pallet-zeropool/runtime-benchmarks',
     'pallet-timestamp/runtime-benchmarks',
     'sp-runtime/runtime-benchmarks',
 ]
@@ -213,7 +219,8 @@ std = [
     'pallet-grandpa/std',
     'pallet-randomness-collective-flip/std',
     'pallet-sudo/std',
-    'zeropool-pallet/std',
+    'pallet-utility/std',
+    'pallet-zeropool/std',
     'pallet-timestamp/std',
     'pallet-transaction-payment-rpc-runtime-api/std',
     'pallet-transaction-payment/std',

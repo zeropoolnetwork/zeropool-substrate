@@ -181,7 +181,7 @@ impl BorshDeserialize for WrapG2 {
 /// returns `AltBn128SerializationError`.
 ///
 /// # Example
-/// ```
+/// ```ignore
 /// # use near_vm_logic::alt_bn128::alt_bn128_g1_multiexp;
 /// # use base64;
 ///
@@ -224,7 +224,7 @@ pub fn alt_bn128_g1_multiexp(data: &[u8]) -> core::result::Result<Vec<u8>, ZeroP
 /// If `borsh::BorshSerialize` returns error during serialization, the function
 /// returns `AltBn128SerializationError`.///
 /// # Example
-/// ```
+/// ```ignore
 /// # use near_vm_logic::alt_bn128::alt_bn128_g1_sum;
 /// # use base64;
 ///
@@ -279,7 +279,7 @@ pub fn alt_bn128_g1_sum(data: &[u8]) -> core::result::Result<Vec<u8>, ZeroPoolEr
 /// If `borsh::BorshSerialize` returns error during serialization, the function
 /// returns `AltBn128SerializationError`.///
 /// # Example
-/// ```
+/// ```ignore
 /// # use near_vm_logic::alt_bn128::alt_bn128_pairing_check;
 /// # use base64;
 ///
