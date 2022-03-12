@@ -19,7 +19,7 @@ pub struct VK {
     pub ic: Vec<G1>,
 }
 
-#[derive(Debug, Clone, BorshSerialize, BorshDeserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
 pub struct Proof {
     pub a: G1,
     pub b: G2,

@@ -55,7 +55,7 @@ pub struct MerkleProof<const L: usize> {
 pub mod pallet {
     use crate::{
         error::ZeroPoolError,
-        tx_decoder::{EvmTxDecoder, TxType},
+        tx_decoder::{TxDecoder, TxType},
         verifier::alt_bn128_groth16verify,
     };
 
@@ -185,6 +185,7 @@ pub mod pallet {
             let operator = Self::operator()?;
 
             if who != operator {
+                log::warn!("Failed to enforce an operator");
                 return Err(Error::<T>::NotOperator.into())
             }
 
@@ -256,17 +257,21 @@ pub mod pallet {
         #[pallet::weight(1000)]
         pub fn transact(origin: OriginFor<T>, data: Vec<u8>) -> DispatchResult {
             let operator = Self::check_operator(origin)?;
-            let tx = EvmTxDecoder::new(data.as_slice());
 
+            log::info!("Processing ZeroPool transaction");
+
+            let tx = TxDecoder::new(data.as_slice());
             let message_hash = keccak_256(tx.memo_message());
             let mut pool_index: U256 = <PoolIndex<T>>::get().into();
             let root_before: U256 = <Roots<T>>::get::<NativeU256>(pool_index.into()).into();
 
             // Verify transfer proof
+            log::debug!("Verifying transfer proof:");
             let transfer_vk = <TransferVk<T>>::get().ok_or(Error::<T>::TransferVkNotSet)?;
-            const DELTA_SIZE: u32 = 256;
             let pool_id: U256 = T::PoolId::get().into();
+            const DELTA_SIZE: u32 = 256;
             let delta = tx.delta().unchecked_add(pool_id.unchecked_shr(DELTA_SIZE));
+            log::debug!("    Preparing data");
             let transact_inputs = [
                 root_before,
                 tx.nullifier().into(),
@@ -274,24 +279,31 @@ pub mod pallet {
                 delta,
                 U256::from_big_endian(&message_hash),
             ];
+            log::debug!("    Verification");
             alt_bn128_groth16verify(&transfer_vk, &tx.transact_proof(), &transact_inputs)
                 .map_err(|err| Into::<Error<T>>::into(err))?;
 
             if <Nullifiers<T>>::contains_key::<NativeU256>(tx.nullifier().into()) {
+                log::warn!("Double spend");
                 return Err(Error::<T>::DoubleSpend.into())
             }
 
             if tx.transfer_index() > pool_index.into() {
+                log::warn!("Index out of bounds");
                 return Err(Error::<T>::IndexOutOfBounds.into())
             }
 
             // Verify tree proof
+            log::debug!("Verifying tree proof:");
             let tree_vk = <TreeVk<T>>::get().ok_or(Error::<T>::TreeVkNotSet)?;
+            log::debug!("    Preparing data");
             let tree_inputs = [root_before, tx.root_after(), tx.out_commit()];
+            log::debug!("    Verification");
             alt_bn128_groth16verify(&tree_vk, &tx.tree_proof(), &tree_inputs)
                 .map_err(|err| Into::<Error<T>>::into(err))?;
 
             // Set the nullifier
+            log::debug!("Updating state");
             let mut elements = [0u8; core::mem::size_of::<U256>() * 2];
             tx.out_commit().using_encoded(|data| {
                 elements[..core::mem::size_of::<U256>()].copy_from_slice(data);
@@ -307,6 +319,7 @@ pub mod pallet {
             <Roots<T>>::insert::<NativeU256, NativeU256>(pool_index.into(), tx.root_after().into());
 
             // Calculate all_messages_hash
+            log::debug!("Updating all_messages_hash");
             let mut hashes = [0u8; 32 * 2];
             let all_messages_hash = <AllMessagesHash<T>>::get();
             all_messages_hash.using_encoded(|data| hashes[..32].copy_from_slice(data));
@@ -315,6 +328,7 @@ pub mod pallet {
             <AllMessagesHash<T>>::put::<NativeU256>(new_all_messages_hash.into());
 
             // TODO: Find a less irritating way to created an indexed event.
+            log::debug!("Emitting event");
             let event = Event::Message(
                 pool_index.into(),
                 new_all_messages_hash.into(),
@@ -336,16 +350,25 @@ pub mod pallet {
             let energy_amount = tx.energy_amount();
 
             match tx.tx_type() {
+                TxType::Transfer => {
+                    log::debug!("Processing transfer");
+                    if token_amount != U256::ZERO || energy_amount != U256::ZERO {
+                        return Err(Error::<T>::IncorrectAmount.into())
+                    }
+                },
                 TxType::Deposit => {
+                    log::debug!("Processing deposit:");
                     if token_amount > U256::MAX.unchecked_div(U256::from(2u32)) ||
                         energy_amount != U256::ZERO
                     {
                         return Err(Error::<T>::IncorrectAmount.into())
                     }
 
+                    log::debug!("    Extracting address");
                     let src = T::AccountId::decode(&mut tx.deposit_address())
                         .map_err(|_err| Into::<DispatchError>::into(Error::<T>::Deserialization))?;
 
+                    log::debug!("    Verifying signature");
                     let sig_result =
                         match sp_core::ed25519::Signature::try_from(tx.deposit_signature()) {
                             Ok(signature) => {
@@ -360,10 +383,12 @@ pub mod pallet {
                         return Err(Error::<T>::InvalidDepositSignature.into())
                     }
 
+                    log::debug!("    Preparing amounts");
                     let encoded_amount = (token_amount.unchecked_mul(*DENOMINATOR)).encode();
                     let native_amount = <BalanceOf<T>>::decode(&mut &encoded_amount[..])
                         .map_err(|_err| Into::<DispatchError>::into(Error::<T>::Deserialization))?;
 
+                    log::debug!("    Transferring to the pool");
                     T::Currency::transfer(
                         &src,
                         &Self::account_id(),
@@ -371,25 +396,25 @@ pub mod pallet {
                         ExistenceRequirement::KeepAlive,
                     )?;
                 },
-                TxType::Transfer =>
-                    if token_amount != U256::ZERO || energy_amount != U256::ZERO {
-                        return Err(Error::<T>::IncorrectAmount.into())
-                    },
                 TxType::Withdraw => {
+                    log::debug!("Processing withdraw:");
                     if token_amount < U256::MAX.unchecked_div(U256::from(2u32)) ||
                         energy_amount < U256::MAX.unchecked_div(U256::from(2u32))
                     {
                         return Err(Error::<T>::IncorrectAmount.into())
                     }
 
+                    log::debug!("    Extracting the destination address");
                     let dest = T::AccountId::decode(&mut tx.memo_address())
                         .map_err(|_err| Into::<DispatchError>::into(Error::<T>::Deserialization))?;
 
+                    log::debug!("    Preparing amounts");
                     let encoded_amount =
                         (token_amount.unchecked_mul(*DENOMINATOR).overflowing_neg().0).encode();
                     let native_amount = <BalanceOf<T>>::decode(&mut &encoded_amount[..])
                         .map_err(|_err| Into::<DispatchError>::into(Error::<T>::Deserialization))?;
 
+                    log::debug!("    Transferring to the destination address");
                     T::Currency::transfer(
                         &Self::account_id(),
                         &dest,
@@ -400,6 +425,7 @@ pub mod pallet {
             }
 
             if fee > U256::ZERO {
+                log::debug!("    Processing fee");
                 let encoded_fee = (fee.unchecked_mul(*DENOMINATOR).overflowing_neg().0).encode();
                 let native_fee = <BalanceOf<T>>::decode(&mut &encoded_fee[..])
                     .map_err(|_err| Into::<DispatchError>::into(Error::<T>::Deserialization))?;
