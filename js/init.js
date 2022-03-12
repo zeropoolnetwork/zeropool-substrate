@@ -1,4 +1,5 @@
 require('dotenv').config()
+
 const fs = require('fs');
 const { ApiPromise, WsProvider  } = require('@polkadot/api');
 const { Keyring } = require('@polkadot/keyring')
@@ -6,7 +7,7 @@ const { cryptoWaitReady } = require('@polkadot/util-crypto')
 
 const { PRIVATE_KEY, RPC_URL } = process.env;
 
-async function initPalet() {
+async function initPallet() {
     await cryptoWaitReady();
     const wsProvider = new WsProvider(RPC_URL);
     const api = await ApiPromise.create({ provider: wsProvider });
@@ -15,6 +16,8 @@ async function initPalet() {
     const alice = keyring.addFromUri('//Alice');
     const owner = keyring.addFromUri(PRIVATE_KEY);
 
+    console.log('Sending money to', owner.address);
+    await api.tx.balances.transfer(owner.address, '10000000000000000000').signAndSend(alice);
     const { nonce } = await api.query.system.account(alice.address);
     await api.tx.sudo
         .sudo(
@@ -35,6 +38,7 @@ async function initPalet() {
     await new Promise(async (res, rej) => {
         const { nonce } = await api.query.system.account(owner.address);
 
+        console.log('Initializing pallet state...')
         await api.tx.utility
             .batch([setOperatorTx, transferVkTx, treeVkTx])
             .signAndSend(owner, { nonce }, ({ events = [], status }) => {
@@ -57,22 +61,17 @@ async function initPalet() {
     });
 }
 
-async function getEvents() {
-
-}
 
 async function main() {
-    await initPalet();
-
-
+    await initPallet();
 }
 
 main()
-    .finally(() => {
-        console.log('Done');
-        process.exit(0);
-    })
     .catch((err) => {
         console.error(err);
         process.exit(1);
     })
+    .finally(() => {
+        console.log('Done');
+        process.exit(0);
+    });
