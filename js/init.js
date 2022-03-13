@@ -15,10 +15,10 @@ async function initPallet(api, alice, owner) {
     const setOperatorTx = api.tx.zeropool.setOperator(owner.address);
 
     // Set verification keys
-    const transferVk = fs.readFileSync('../keys/transfer_verification_key.bin').toString('hex');
+    const transferVk = fs.readFileSync('params/transfer_verification_key.bin').toString('hex');
     const transferVkTx = api.tx.zeropool.setTransferVk(`0x${transferVk}`);
 
-    const treeVk = fs.readFileSync('../keys/tree_update_verification_key.bin').toString('hex');
+    const treeVk = fs.readFileSync('params/tree_verification_key.bin').toString('hex');
     const treeVkTx = api.tx.zeropool.setTreeVk(`0x${treeVk}`);
 
     await new Promise(async (res, rej) => {

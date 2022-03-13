@@ -14,6 +14,8 @@ services:
       - RELAYER_PRIVATE_KEY=${RELAYER_PRIVATE_KEY:-0x4ca479f5e0dc0ee04ebcbadb64c220267dad42b8cfa4da1f0874787523b4709c}
     ports:
       - 9944:9944
+    volumes:
+      - ./params:/app/params
   redis_polkadot:
     command: [redis-server, --appendonly, 'yes']
     image: redis:6.2.6

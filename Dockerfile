@@ -4,6 +4,8 @@ COPY . .
 RUN cargo build --release
 
 FROM node:16
+
+WORKDIR /app
 COPY ./js .
 RUN yarn
 COPY ./docker/startup.sh .
