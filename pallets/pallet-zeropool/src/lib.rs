@@ -130,8 +130,8 @@ pub mod pallet {
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
-        /// [pool_index, all_messages_hash, memo]
-        Message(NativeU256, NativeU256, Vec<u8>),
+        /// [pool_index, all_messages_hash, commitment, memo]
+        Message(NativeU256, NativeU256, NativeU256, Vec<u8>),
         TransferVkSet,
         TreeVkSet,
         OperatorSet(T::AccountId),
@@ -261,7 +261,8 @@ pub mod pallet {
             log::info!("Processing ZeroPool transaction");
 
             let tx = TxDecoder::new(data.as_slice());
-            let message_hash = keccak_256(tx.memo_message());
+            let message_hash = keccak_256(tx.memo_message()); // FIXME: REDUCE!!!
+            let message_hash_num = U256::from_little_endian(&message_hash).unchecked_rem(*R);
             let mut pool_index: U256 = <PoolIndex<T>>::get().into();
             let root_before: U256 = <Roots<T>>::get::<NativeU256>(pool_index.into()).into();
 
@@ -272,13 +273,8 @@ pub mod pallet {
             const DELTA_SIZE: u32 = 256;
             let delta = tx.delta().unchecked_add(pool_id.unchecked_shr(DELTA_SIZE));
             log::debug!("    Preparing data");
-            let transact_inputs = [
-                root_before,
-                tx.nullifier().into(),
-                tx.out_commit(),
-                delta,
-                U256::from_big_endian(&message_hash),
-            ];
+            let transact_inputs =
+                [root_before, tx.nullifier().into(), tx.out_commit(), delta, message_hash_num];
             log::debug!("    Verification");
             alt_bn128_groth16verify(&transfer_vk, &tx.transact_proof(), &transact_inputs)
                 .map_err(|err| Into::<Error<T>>::into(err))?;
@@ -312,11 +308,8 @@ pub mod pallet {
                 elements[core::mem::size_of::<U256>()..].copy_from_slice(data);
             });
             let hash = U256::from_big_endian(&keccak_256(&elements));
-            <Nullifiers<T>>::insert::<NativeU256, NativeU256>(tx.nullifier().into(), hash.into());
 
             pool_index = U256::from(pool_index).unchecked_add(U256::from(128u8));
-            <PoolIndex<T>>::put::<NativeU256>(pool_index.into());
-            <Roots<T>>::insert::<NativeU256, NativeU256>(pool_index.into(), tx.root_after().into());
 
             // Calculate all_messages_hash
             log::debug!("Updating all_messages_hash");
@@ -325,25 +318,6 @@ pub mod pallet {
             all_messages_hash.using_encoded(|data| hashes[..32].copy_from_slice(data));
             hashes[32..].copy_from_slice(&message_hash);
             let new_all_messages_hash = U256::from_big_endian(&keccak_256(&hashes));
-            <AllMessagesHash<T>>::put::<NativeU256>(new_all_messages_hash.into());
-
-            // TODO: Find a less irritating way to created an indexed event.
-            log::debug!("Emitting event");
-            let event = Event::Message(
-                pool_index.into(),
-                new_all_messages_hash.into(),
-                tx.memo_message().to_vec(),
-            );
-
-            let event = <<T as Config>::Event as From<Event<T>>>::from(event);
-
-            let event =
-                <<T as Config>::Event as Into<<T as frame_system::Config>::Event>>::into(event);
-
-            frame_system::Pallet::<T>::deposit_event_indexed(
-                &[T::Hashing::hash(b"ZeropoolMessage")],
-                event,
-            );
 
             let fee = tx.memo_fee();
             let token_amount = tx.token_amount().overflowing_add(fee).0;
@@ -370,10 +344,10 @@ pub mod pallet {
 
                     log::debug!("    Verifying signature");
                     let sig_result =
-                        match sp_core::ed25519::Signature::try_from(tx.deposit_signature()) {
+                        match sp_core::sr25519::Signature::try_from(tx.deposit_signature()) {
                             Ok(signature) => {
                                 let signer =
-                                    sp_core::ed25519::Public::from_slice(tx.deposit_address());
+                                    sp_core::sr25519::Public::from_slice(tx.deposit_address());
                                 signature.verify(tx.nullifier_bytes(), &signer)
                             },
                             _ => false,
@@ -424,6 +398,25 @@ pub mod pallet {
                 },
             }
 
+            // TODO: Find a less irritating way to created an indexed event.
+            log::debug!("Emitting event");
+            let event = Event::Message(
+                pool_index.into(),
+                new_all_messages_hash.into(),
+                tx.out_commit().into(),
+                tx.ciphertext().to_vec(),
+            );
+
+            let event = <<T as Config>::Event as From<Event<T>>>::from(event);
+
+            let event =
+                <<T as Config>::Event as Into<<T as frame_system::Config>::Event>>::into(event);
+
+            frame_system::Pallet::<T>::deposit_event_indexed(
+                &[T::Hashing::hash(b"ZeropoolMessage")],
+                event,
+            );
+
             if fee > U256::ZERO {
                 log::debug!("    Processing fee");
                 let encoded_fee = (fee.unchecked_mul(*DENOMINATOR).overflowing_neg().0).encode();
@@ -437,6 +430,13 @@ pub mod pallet {
                     ExistenceRequirement::KeepAlive,
                 )?;
             }
+
+            <PoolIndex<T>>::put::<NativeU256>(pool_index.into());
+            <Roots<T>>::insert::<NativeU256, NativeU256>(pool_index.into(), tx.root_after().into());
+            <Nullifiers<T>>::insert::<NativeU256, NativeU256>(tx.nullifier().into(), hash.into());
+            <AllMessagesHash<T>>::put::<NativeU256>(new_all_messages_hash.into());
+
+            log::info!("Transaction processed successfully");
 
             Ok(())
         }
