@@ -13,9 +13,10 @@ use lazy_static::lazy_static;
 use maybestd::vec::Vec;
 pub use pallet::*;
 use sp_io::hashing::keccak_256;
+use sp_runtime::traits::Hash;
 use verifier::VK;
 
-use crate::num::U256;
+use crate::num::{NativeU256, U256};
 
 mod alt_bn128;
 mod error;
@@ -54,7 +55,7 @@ pub struct MerkleProof<const L: usize> {
 pub mod pallet {
     use crate::{
         error::ZeroPoolError,
-        tx_decoder::{EvmTxDecoder, TxType},
+        tx_decoder::{TxDecoder, TxType},
         verifier::alt_bn128_groth16verify,
     };
 
@@ -81,10 +82,10 @@ pub mod pallet {
         type InitialOwner: Get<Self::AccountId>;
 
         #[pallet::constant]
-        type PoolId: Get<U256>;
+        type PoolId: Get<NativeU256>;
 
         #[pallet::constant]
-        type FirstRoot: Get<U256>;
+        type FirstRoot: Get<NativeU256>;
     }
 
     #[pallet::pallet]
@@ -92,21 +93,22 @@ pub mod pallet {
     pub struct Pallet<T>(_);
 
     #[pallet::storage]
-    pub type Nullifiers<T> = StorageMap<_, Blake2_128Concat, U256, U256>;
+    pub type Nullifiers<T> = StorageMap<_, Blake2_128Concat, NativeU256, NativeU256>;
 
     #[pallet::type_value]
-    pub fn FirstRoot<T: Config>() -> U256 {
+    pub fn FirstRoot<T: Config>() -> NativeU256 {
         T::FirstRoot::get()
     }
 
     #[pallet::storage]
-    pub type Roots<T> = StorageMap<_, Blake2_128Concat, U256, U256, ValueQuery, FirstRoot<T>>;
+    pub type Roots<T> =
+        StorageMap<_, Blake2_128Concat, NativeU256, NativeU256, ValueQuery, FirstRoot<T>>;
 
     #[pallet::storage]
-    pub type PoolIndex<T> = StorageValue<_, U256, ValueQuery>;
+    pub type PoolIndex<T> = StorageValue<_, NativeU256, ValueQuery>;
 
     #[pallet::storage]
-    pub type AllMessagesHash<T> = StorageValue<_, U256, ValueQuery>;
+    pub type AllMessagesHash<T> = StorageValue<_, NativeU256, ValueQuery>;
 
     #[pallet::storage]
     pub type TransferVk<T> = StorageValue<_, VK>;
@@ -128,8 +130,11 @@ pub mod pallet {
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
-        /// [pool_index, all_messages_hash, memo]
-        Message(U256, U256, Vec<u8>),
+        /// [pool_index, all_messages_hash, commitment, memo]
+        Message(NativeU256, NativeU256, NativeU256, Vec<u8>),
+        TransferVkSet,
+        TreeVkSet,
+        OperatorSet(T::AccountId),
     }
 
     #[pallet::error]
@@ -180,6 +185,7 @@ pub mod pallet {
             let operator = Self::operator()?;
 
             if who != operator {
+                log::warn!("Failed to enforce an operator");
                 return Err(Error::<T>::NotOperator.into())
             }
 
@@ -213,71 +219,87 @@ pub mod pallet {
         pub fn set_operator(origin: OriginFor<T>, address: T::AccountId) -> DispatchResult {
             Self::check_owner(origin)?;
 
-            <Operator<T>>::put(address);
+            <Operator<T>>::put(address.clone());
+
+            Self::deposit_event(Event::OperatorSet(address));
 
             Ok(())
         }
 
         #[pallet::weight(1000)]
-        pub fn set_transfer_vk(origin: OriginFor<T>, data: VK) -> DispatchResult {
+        pub fn set_transfer_vk(origin: OriginFor<T>, data: Vec<u8>) -> DispatchResult {
             Self::check_owner(origin)?;
 
-            <TransferVk<T>>::put(data);
+            let vk = VK::try_from_slice(&data)
+                .map_err(|_err| Into::<DispatchError>::into(Error::<T>::Deserialization))?;
+            <TransferVk<T>>::put(vk);
+
+            Self::deposit_event(Event::TransferVkSet);
 
             Ok(())
         }
 
         #[pallet::weight(1000)]
-        pub fn set_tree_vk(origin: OriginFor<T>, data: VK) -> DispatchResult {
+        pub fn set_tree_vk(origin: OriginFor<T>, data: Vec<u8>) -> DispatchResult {
             Self::check_owner(origin)?;
 
-            <TreeVk<T>>::put(data);
+            let vk = VK::try_from_slice(&data)
+                .map_err(|_err| Into::<DispatchError>::into(Error::<T>::Deserialization))?;
+            <TreeVk<T>>::put(vk);
+
+            Self::deposit_event(Event::TreeVkSet);
 
             Ok(())
         }
 
-        // TODO: Use SCALE codec for transaction data
         // TODO: Split into separate methods?
         // TODO: Weight
         #[pallet::weight(1000)]
         pub fn transact(origin: OriginFor<T>, data: Vec<u8>) -> DispatchResult {
             let operator = Self::check_operator(origin)?;
-            let tx = EvmTxDecoder::new(data.as_slice());
 
-            let message_hash = keccak_256(tx.memo_message());
-            let mut pool_index = <PoolIndex<T>>::get();
-            let root_before = <Roots<T>>::get(pool_index);
+            log::info!("Processing ZeroPool transaction");
+
+            let tx = TxDecoder::new(data.as_slice());
+            let message_hash = keccak_256(tx.memo_message()); // FIXME: REDUCE!!!
+            let message_hash_num = U256::from_little_endian(&message_hash).unchecked_rem(*R);
+            let mut pool_index: U256 = <PoolIndex<T>>::get().into();
+            let root_before: U256 = <Roots<T>>::get::<NativeU256>(pool_index.into()).into();
 
             // Verify transfer proof
+            log::debug!("Verifying transfer proof:");
             let transfer_vk = <TransferVk<T>>::get().ok_or(Error::<T>::TransferVkNotSet)?;
+            let pool_id: U256 = T::PoolId::get().into();
             const DELTA_SIZE: u32 = 256;
-            let pool_id = T::PoolId::get();
             let delta = tx.delta().unchecked_add(pool_id.unchecked_shr(DELTA_SIZE));
-            let transact_inputs = [
-                root_before,
-                tx.nullifier(),
-                tx.out_commit(),
-                delta,
-                U256::from_big_endian(&message_hash),
-            ];
+            log::debug!("    Preparing data");
+            let transact_inputs =
+                [root_before, tx.nullifier().into(), tx.out_commit(), delta, message_hash_num];
+            log::debug!("    Verification");
             alt_bn128_groth16verify(&transfer_vk, &tx.transact_proof(), &transact_inputs)
                 .map_err(|err| Into::<Error<T>>::into(err))?;
 
-            if <Nullifiers<T>>::contains_key(tx.nullifier()) {
+            if <Nullifiers<T>>::contains_key::<NativeU256>(tx.nullifier().into()) {
+                log::warn!("Double spend");
                 return Err(Error::<T>::DoubleSpend.into())
             }
 
-            if tx.transfer_index() > pool_index {
+            if tx.transfer_index() > pool_index.into() {
+                log::warn!("Index out of bounds");
                 return Err(Error::<T>::IndexOutOfBounds.into())
             }
 
             // Verify tree proof
+            log::debug!("Verifying tree proof:");
             let tree_vk = <TreeVk<T>>::get().ok_or(Error::<T>::TreeVkNotSet)?;
+            log::debug!("    Preparing data");
             let tree_inputs = [root_before, tx.root_after(), tx.out_commit()];
+            log::debug!("    Verification");
             alt_bn128_groth16verify(&tree_vk, &tx.tree_proof(), &tree_inputs)
                 .map_err(|err| Into::<Error<T>>::into(err))?;
 
             // Set the nullifier
+            log::debug!("Updating state");
             let mut elements = [0u8; core::mem::size_of::<U256>() * 2];
             tx.out_commit().using_encoded(|data| {
                 elements[..core::mem::size_of::<U256>()].copy_from_slice(data);
@@ -286,46 +308,46 @@ pub mod pallet {
                 elements[core::mem::size_of::<U256>()..].copy_from_slice(data);
             });
             let hash = U256::from_big_endian(&keccak_256(&elements));
-            <Nullifiers<T>>::insert(tx.nullifier(), hash);
 
-            pool_index = pool_index.unchecked_add(U256::from(128u8));
-            <PoolIndex<T>>::put(pool_index);
-            <Roots<T>>::insert(pool_index, tx.root_after());
+            pool_index = U256::from(pool_index).unchecked_add(U256::from(128u8));
 
             // Calculate all_messages_hash
+            log::debug!("Updating all_messages_hash");
             let mut hashes = [0u8; 32 * 2];
             let all_messages_hash = <AllMessagesHash<T>>::get();
             all_messages_hash.using_encoded(|data| hashes[..32].copy_from_slice(data));
             hashes[32..].copy_from_slice(&message_hash);
             let new_all_messages_hash = U256::from_big_endian(&keccak_256(&hashes));
-            <AllMessagesHash<T>>::put(new_all_messages_hash);
-
-            Self::deposit_event(Event::Message(
-                pool_index,
-                new_all_messages_hash,
-                tx.memo_message().to_vec(),
-            ));
 
             let fee = tx.memo_fee();
             let token_amount = tx.token_amount().overflowing_add(fee).0;
             let energy_amount = tx.energy_amount();
 
             match tx.tx_type() {
+                TxType::Transfer => {
+                    log::debug!("Processing transfer");
+                    if token_amount != U256::ZERO || energy_amount != U256::ZERO {
+                        return Err(Error::<T>::IncorrectAmount.into())
+                    }
+                },
                 TxType::Deposit => {
+                    log::debug!("Processing deposit:");
                     if token_amount > U256::MAX.unchecked_div(U256::from(2u32)) ||
                         energy_amount != U256::ZERO
                     {
                         return Err(Error::<T>::IncorrectAmount.into())
                     }
 
+                    log::debug!("    Extracting address");
                     let src = T::AccountId::decode(&mut tx.deposit_address())
                         .map_err(|_err| Into::<DispatchError>::into(Error::<T>::Deserialization))?;
 
+                    log::debug!("    Verifying signature");
                     let sig_result =
-                        match sp_core::ed25519::Signature::try_from(tx.deposit_signature()) {
+                        match sp_core::sr25519::Signature::try_from(tx.deposit_signature()) {
                             Ok(signature) => {
                                 let signer =
-                                    sp_core::ed25519::Public::from_slice(tx.deposit_address());
+                                    sp_core::sr25519::Public::from_slice(tx.deposit_address());
                                 signature.verify(tx.nullifier_bytes(), &signer)
                             },
                             _ => false,
@@ -335,46 +357,68 @@ pub mod pallet {
                         return Err(Error::<T>::InvalidDepositSignature.into())
                     }
 
+                    log::debug!("    Preparing amounts");
                     let encoded_amount = (token_amount.unchecked_mul(*DENOMINATOR)).encode();
                     let native_amount = <BalanceOf<T>>::decode(&mut &encoded_amount[..])
                         .map_err(|_err| Into::<DispatchError>::into(Error::<T>::Deserialization))?;
 
+                    log::debug!("    Transferring to the pool");
                     T::Currency::transfer(
                         &src,
                         &Self::account_id(),
                         native_amount,
-                        ExistenceRequirement::KeepAlive,
+                        ExistenceRequirement::AllowDeath,
                     )?;
                 },
-                TxType::Transfer =>
-                    if token_amount != U256::ZERO || energy_amount != U256::ZERO {
-                        return Err(Error::<T>::IncorrectAmount.into())
-                    },
                 TxType::Withdraw => {
-                    if token_amount < U256::MAX.unchecked_div(U256::from(2u32)) ||
-                        energy_amount < U256::MAX.unchecked_div(U256::from(2u32))
-                    {
-                        return Err(Error::<T>::IncorrectAmount.into())
-                    }
+                    log::debug!("Processing withdraw:");
+                    // if token_amount < U256::MAX.unchecked_div(U256::from(2u32)) ||
+                    //     energy_amount < U256::MAX.unchecked_div(U256::from(2u32))
+                    // {
+                    //     return Err(Error::<T>::IncorrectAmount.into())
+                    // }
 
+                    log::debug!("    Extracting the destination address");
                     let dest = T::AccountId::decode(&mut tx.memo_address())
                         .map_err(|_err| Into::<DispatchError>::into(Error::<T>::Deserialization))?;
 
+                    log::debug!("    Preparing amounts");
                     let encoded_amount =
-                        (token_amount.unchecked_mul(*DENOMINATOR).overflowing_neg().0).encode();
+                        (token_amount.overflowing_neg().0.unchecked_mul(*DENOMINATOR)).encode();
                     let native_amount = <BalanceOf<T>>::decode(&mut &encoded_amount[..])
                         .map_err(|_err| Into::<DispatchError>::into(Error::<T>::Deserialization))?;
 
+                    log::debug!("    Transferring to the destination address");
                     T::Currency::transfer(
                         &Self::account_id(),
                         &dest,
                         native_amount,
-                        ExistenceRequirement::KeepAlive,
+                        ExistenceRequirement::AllowDeath,
                     )?;
                 },
             }
 
+            // TODO: Find a less irritating way to created an indexed event.
+            log::debug!("Emitting event");
+            let event = Event::Message(
+                pool_index.into(),
+                new_all_messages_hash.into(),
+                tx.out_commit().into(),
+                tx.ciphertext().to_vec(),
+            );
+
+            let event = <<T as Config>::Event as From<Event<T>>>::from(event);
+
+            let event =
+                <<T as Config>::Event as Into<<T as frame_system::Config>::Event>>::into(event);
+
+            frame_system::Pallet::<T>::deposit_event_indexed(
+                &[T::Hashing::hash(b"ZeropoolMessage")],
+                event,
+            );
+
             if fee > U256::ZERO {
+                log::debug!("    Processing fee");
                 let encoded_fee = (fee.unchecked_mul(*DENOMINATOR).overflowing_neg().0).encode();
                 let native_fee = <BalanceOf<T>>::decode(&mut &encoded_fee[..])
                     .map_err(|_err| Into::<DispatchError>::into(Error::<T>::Deserialization))?;
@@ -383,9 +427,16 @@ pub mod pallet {
                     &Self::account_id(),
                     &operator,
                     native_fee,
-                    ExistenceRequirement::KeepAlive,
+                    ExistenceRequirement::AllowDeath,
                 )?;
             }
+
+            <PoolIndex<T>>::put::<NativeU256>(pool_index.into());
+            <Roots<T>>::insert::<NativeU256, NativeU256>(pool_index.into(), tx.root_after().into());
+            <Nullifiers<T>>::insert::<NativeU256, NativeU256>(tx.nullifier().into(), hash.into());
+            <AllMessagesHash<T>>::put::<NativeU256>(new_all_messages_hash.into());
+
+            log::info!("Transaction processed successfully");
 
             Ok(())
         }

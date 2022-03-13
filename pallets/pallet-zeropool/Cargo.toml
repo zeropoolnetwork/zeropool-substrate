@@ -1,5 +1,5 @@
 [package]
-name = 'zeropool-pallet'
+name = 'pallet-zeropool'
 version = '4.0.0-dev'
 description = 'FRAME pallet template for defining custom runtime logic.'
 authors = ['Substrate DevHub <https://github.com/substrate-developer-hub>']
@@ -14,12 +14,11 @@ targets = ['x86_64-unknown-linux-gnu']
 
 [dependencies]
 borsh = { version = '0.9.1', default-features = false }
-ff-uint =  { version = '0.2.2', default-features = false, features = ['borsh_support'] }
+ff-uint =  { version = '0.2.4', default-features = false, features = ['borsh_support', 'scale_support'] }
 num-traits = { version = "0.2.14", default-features = false }
 num-derive = "0.3.3"
 lazy_static = "1.4.0"
-serde = "1.0.136"
-serde_json = "1.0.78"
+log = "0.4.14"
 
 [dependencies.bn]
 package = "zeropool-bn"
@@ -81,6 +80,9 @@ git = 'https://github.com/paritytech/substrate.git'
 tag = 'monthly-2021-12'
 version = '4.0.0-dev'
 
+[dev-dependencies]
+hex-literal = "0.3.4"
+
 [features]
 default = ['std', 'borsh_support']
 runtime-benchmarks = ['frame-benchmarking']
@@ -98,3 +100,4 @@ std = [
 ]
 try-runtime = ['frame-support/try-runtime']
 borsh_support = ['ff-uint/borsh_support']
+scale_support = ['ff-uint/scale_support']

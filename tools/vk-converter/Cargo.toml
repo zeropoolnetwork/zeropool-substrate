@@ -1,0 +1,11 @@
+[package]
+name = "vk-converter"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+fawkes-crypto = "4.3.3"
+serde = "1.0.136"
+serde_json = "1.0.79"

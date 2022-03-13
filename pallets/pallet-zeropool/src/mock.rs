@@ -1,4 +1,4 @@
-use crate::{self as zeropool_pallet, num::U256};
+use crate::{self as pallet_zeropool, num::U256};
 use ff_uint::Uint;
 use frame_support::{parameter_types, PalletId};
 use sp_core::H256;
@@ -20,7 +20,7 @@ frame_support::construct_runtime!(
     {
         System: frame_system::{Pallet, Call, Config, Storage, Event<T>},
         Balances: pallet_balances::{Pallet, Call, Storage, Config<T>, Event<T>},
-        Zeropool: zeropool_pallet::{Pallet, Call, Storage, Event<T>},
+        Zeropool: pallet_zeropool::{Pallet, Call, Storage, Event<T>},
     }
 );
 
@@ -75,7 +75,7 @@ parameter_types! {
     pub const InitialOwner: <Test as frame_system::Config>::AccountId = 1;
 }
 
-impl zeropool_pallet::Config for Test {
+impl pallet_zeropool::Config for Test {
     type Event = Event;
     type PalletId = TestPalletId;
     type Currency = Balances;
