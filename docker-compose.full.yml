@@ -60,11 +60,6 @@ services:
     ports:
       - 80:80
 
-networks:
-  default:
-    external: true
-    name: zeropool-testnet
-
 volumes:
   relayer_polkadot_tree:
   relayer_polkadot_txs:
