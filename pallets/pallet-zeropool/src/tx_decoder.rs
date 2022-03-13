@@ -13,6 +13,7 @@ const DELTA_SIZE: usize = 28;
 const BALANCE_SIZE: usize = 8;
 const ADDRESS_SIZE: usize = 32;
 const SIGNATURE_SIZE: usize = 64;
+const MEMO_META_SIZE: usize = 8;
 
 // Offsets
 // const SELECTOR: usize = 0;
@@ -129,6 +130,19 @@ impl<'a> TxDecoder<'a> {
     #[inline]
     pub fn memo_address(&self) -> &[u8] {
         &self.data[MEMO_ADDRESS..(MEMO_ADDRESS + ADDRESS_SIZE)]
+    }
+
+    #[inline]
+    pub fn ciphertext(&self) -> &[u8] {
+        let offset = if self.tx_type() == TxType::Withdraw {
+            MEMO_ADDRESS + ADDRESS_SIZE
+        } else {
+            MEMO_FEE + BALANCE_SIZE
+        };
+
+        let data_size = offset - MEMO;
+
+        &self.data[offset..(offset + self.memo_size() - data_size)]
     }
 
     #[inline]
