@@ -367,16 +367,16 @@ pub mod pallet {
                         &src,
                         &Self::account_id(),
                         native_amount,
-                        ExistenceRequirement::KeepAlive,
+                        ExistenceRequirement::AllowDeath,
                     )?;
                 },
                 TxType::Withdraw => {
                     log::debug!("Processing withdraw:");
-                    if token_amount < U256::MAX.unchecked_div(U256::from(2u32)) ||
-                        energy_amount < U256::MAX.unchecked_div(U256::from(2u32))
-                    {
-                        return Err(Error::<T>::IncorrectAmount.into())
-                    }
+                    // if token_amount < U256::MAX.unchecked_div(U256::from(2u32)) ||
+                    //     energy_amount < U256::MAX.unchecked_div(U256::from(2u32))
+                    // {
+                    //     return Err(Error::<T>::IncorrectAmount.into())
+                    // }
 
                     log::debug!("    Extracting the destination address");
                     let dest = T::AccountId::decode(&mut tx.memo_address())
@@ -384,7 +384,7 @@ pub mod pallet {
 
                     log::debug!("    Preparing amounts");
                     let encoded_amount =
-                        (token_amount.unchecked_mul(*DENOMINATOR).overflowing_neg().0).encode();
+                        (token_amount.overflowing_neg().0.unchecked_mul(*DENOMINATOR)).encode();
                     let native_amount = <BalanceOf<T>>::decode(&mut &encoded_amount[..])
                         .map_err(|_err| Into::<DispatchError>::into(Error::<T>::Deserialization))?;
 
@@ -393,7 +393,7 @@ pub mod pallet {
                         &Self::account_id(),
                         &dest,
                         native_amount,
-                        ExistenceRequirement::KeepAlive,
+                        ExistenceRequirement::AllowDeath,
                     )?;
                 },
             }
@@ -427,7 +427,7 @@ pub mod pallet {
                     &Self::account_id(),
                     &operator,
                     native_fee,
-                    ExistenceRequirement::KeepAlive,
+                    ExistenceRequirement::AllowDeath,
                 )?;
             }
 
