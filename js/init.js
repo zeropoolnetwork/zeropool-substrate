@@ -103,7 +103,7 @@ async function main() {
 
     await initPallet(api, alice, owner);
     await initAccount(api, alice, user.address);
-    await test(api, owner);
+    // await test(api, owner);
 
 }
 

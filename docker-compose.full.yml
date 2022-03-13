@@ -1,0 +1,69 @@
+
+services:
+  polkadot_js_apps:
+    image: jacogr/polkadot-js-apps
+    container_name: polkadot_js_apps
+    ports:
+      - 81:80
+  substrate_node:
+    image: voidxnull/zeropool-substrate-node
+    container_name: substrate_node
+    restart: always
+    environment:
+      - RUST_LOG=info,pallet-zeropool=debug
+    ports:
+      - 9944:9944
+    entrypoint: ./node-template --dev --ws-external --log=info,pallet_zeropool=debug
+  redis_polkadot:
+    command: [redis-server, --appendonly, 'yes']
+    image: redis:6.2.6
+  relayer_polkadot:
+    image: voidxnull/zeropool-relayer-polkadot:latest
+    depends_on:
+      - substrate_node
+      - redis_polkadot
+    environment:
+      - RPC_URL=ws://substrate_node:9944
+      - POOL_ADDRESS=0xC40Dd5B1250F4A7E70E1823d1D8eAbEA247cB1B3
+      - RELAYER_REDIS_URL=redis_polkadot:6379
+      - RELAYER_GAS_LIMIT=2000000
+      - PORT=3001
+      - RELAYER_ADDRESS_PRIVATE_KEY=${RELAYER_PRIVATE_KEY:-0x4ca479f5e0dc0ee04ebcbadb64c220267dad42b8cfa4da1f0874787523b4709c}
+      - TX_PROOFS_DIR=./tx_proofs
+      - RELAYER_FEE=0
+      - MAX_NATIVE_AMOUNT_FAUCET=0
+      # - VIRTUAL_HOST=polkadot.testnet.relayer.v2.zeropool.network
+      # - LETSENCRYPT_HOST=polkadot.testnet.relayer.v2.zeropool.network
+      # - LETSENCRYPT_EMAIL=mail@test.com
+    volumes:
+      - /root/params:/app/zp-relayer/params
+      - relayer_polkadot_tree:/app/tree.db
+      - relayer_polkadot_txs:/app/txs.db
+    ports:
+      - 3001:3001
+  console_polkadot:
+    image: voidxnull/zeropool-console
+    container_name: console_polkadot
+    restart: always
+    environment:
+      - NETWORK=polkadot
+      - RPC_URL=ws://${DOCKER_GATEWAY_HOST:-host.docker.internal}:9944
+      - RELAYER_URL=http://${DOCKER_GATEWAY_HOST:-host.docker.internal}:3001
+      - CONTRACT_ADDRESS=0xC40Dd5B1250F4A7E70E1823d1D8eAbEA247cB1B3 # TODO: irrelevant, remove
+      - TOKEN_ADDRESS=0xcda2B3489aCDB31A428bd33fcAEE5c7c50919b35 # TODO: irrelevant, remove
+      # - VIRTUAL_HOST=polkadot.testnet.console.v2.zeropool.network
+      # - LETSENCRYPT_HOST=polkadot.testnet.console.v2.zeropool.network
+      # - LETSENCRYPT_EMAIL=mail@test.com
+    volumes:
+      - /root/params:/usr/share/nginx/html/assets
+    ports:
+      - 80:80
+
+networks:
+  default:
+    external: true
+    name: zeropool-testnet
+
+volumes:
+  relayer_polkadot_tree:
+  relayer_polkadot_txs:
