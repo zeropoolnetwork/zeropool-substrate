@@ -14,7 +14,6 @@ services:
       - RELAYER_PRIVATE_KEY=${RELAYER_PRIVATE_KEY:-0x4ca479f5e0dc0ee04ebcbadb64c220267dad42b8cfa4da1f0874787523b4709c}
     ports:
       - 9944:9944
-    entrypoint: ./node-template --dev --ws-external --log=info,pallet_zeropool=debug
   redis_polkadot:
     command: [redis-server, --appendonly, 'yes']
     image: redis:6.2.6
@@ -37,7 +36,7 @@ services:
       # - LETSENCRYPT_HOST=polkadot.testnet.relayer.v2.zeropool.network
       # - LETSENCRYPT_EMAIL=mail@test.com
     volumes:
-      - /root/params:/app/zp-relayer/params
+      - ./params:/app/zp-relayer/params
       - relayer_polkadot_tree:/app/tree.db
       - relayer_polkadot_txs:/app/txs.db
     ports:
@@ -48,15 +47,15 @@ services:
     restart: always
     environment:
       - NETWORK=polkadot
-      - RPC_URL=ws://${DOCKER_GATEWAY_HOST:-host.docker.internal}:9944
-      - RELAYER_URL=http://${DOCKER_GATEWAY_HOST:-host.docker.internal}:3001
+      - RPC_URL=ws://${DOCKER_GATEWAY_HOST:-localhost}:9944
+      - RELAYER_URL=http://${DOCKER_GATEWAY_HOST:-localhost}:3001
       - CONTRACT_ADDRESS=0xC40Dd5B1250F4A7E70E1823d1D8eAbEA247cB1B3 # TODO: irrelevant, remove
       - TOKEN_ADDRESS=0xcda2B3489aCDB31A428bd33fcAEE5c7c50919b35 # TODO: irrelevant, remove
       # - VIRTUAL_HOST=polkadot.testnet.console.v2.zeropool.network
       # - LETSENCRYPT_HOST=polkadot.testnet.console.v2.zeropool.network
       # - LETSENCRYPT_EMAIL=mail@test.com
     volumes:
-      - /root/params:/usr/share/nginx/html/assets
+      - ./params:/usr/share/nginx/html/assets
     ports:
       - 80:80
 
