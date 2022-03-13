@@ -5,5 +5,6 @@ RUN cargo build --release
 
 FROM paritytech/ci-linux:staging
 COPY ./js .
+COPY ./docker/startup.sh .
 COPY --from=build /app/target/release/node-template .
-ENTRYPOINT ["./node-template", "--dev", "--ws-external"]
+ENTRYPOINT ["./startup.sh"]
