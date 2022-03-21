@@ -80,6 +80,7 @@ impl pallet_zeropool::Config for Test {
     type PalletId = TestPalletId;
     type Currency = Balances;
 
+    type OperatorManager = ();
     type PoolId = PoolId;
     type FirstRoot = FirstRoot;
     type InitialOwner = InitialOwner;

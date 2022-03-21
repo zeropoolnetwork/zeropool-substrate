@@ -17,6 +17,7 @@ use sp_runtime::traits::Hash;
 use verifier::VK;
 
 use crate::num::{NativeU256, U256};
+pub use crate::operator::OperatorManager;
 
 mod alt_bn128;
 mod error;
@@ -24,6 +25,7 @@ mod maybestd;
 pub mod num;
 mod tx_decoder;
 mod verifier;
+mod operator;
 
 #[cfg(test)]
 mod mock;
@@ -77,6 +79,8 @@ pub mod pallet {
         #[pallet::constant]
         type PalletId: Get<PalletId>;
         type Currency: Currency<Self::AccountId>;
+
+        type OperatorManager: OperatorManager<Self::AccountId>;
 
         #[pallet::constant]
         type InitialOwner: Get<Self::AccountId>;
@@ -134,7 +138,6 @@ pub mod pallet {
         Message(NativeU256, NativeU256, NativeU256, Vec<u8>),
         TransferVkSet,
         TreeVkSet,
-        OperatorSet(T::AccountId),
     }
 
     #[pallet::error]
@@ -173,7 +176,7 @@ pub mod pallet {
         }
 
         fn operator() -> Result<T::AccountId, DispatchError> {
-            <Operator<T>>::get().ok_or(Error::<T>::NotOperator.into())
+            <<T as Config>::OperatorManager>::operator().ok_or(Error::<T>::NotOperator.into())
         }
 
         fn owner() -> T::AccountId {
@@ -215,16 +218,16 @@ pub mod pallet {
             Ok(())
         }
 
-        #[pallet::weight(1000)]
-        pub fn set_operator(origin: OriginFor<T>, address: T::AccountId) -> DispatchResult {
-            Self::check_owner(origin)?;
+        // #[pallet::weight(1000)]
+        // pub fn set_operator(origin: OriginFor<T>, address: T::AccountId) -> DispatchResult {
+        //     Self::check_owner(origin)?;
 
-            <Operator<T>>::put(address.clone());
+        //     <Operator<T>>::put(address.clone());
 
-            Self::deposit_event(Event::OperatorSet(address));
+        //     Self::deposit_event(Event::OperatorSet(address));
 
-            Ok(())
-        }
+        //     Ok(())
+        // }
 
         #[pallet::weight(1000)]
         pub fn set_transfer_vk(origin: OriginFor<T>, data: Vec<u8>) -> DispatchResult {
