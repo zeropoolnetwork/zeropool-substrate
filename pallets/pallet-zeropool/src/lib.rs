@@ -25,7 +25,7 @@ mod maybestd;
 pub mod num;
 mod tx_decoder;
 mod verifier;
-mod operator;
+pub mod operator;
 
 #[cfg(test)]
 mod mock;
@@ -128,9 +128,6 @@ pub mod pallet {
     #[pallet::storage]
     pub type Owner<T: Config> = StorageValue<_, T::AccountId, ValueQuery, DefaultOwner<T>>;
 
-    #[pallet::storage]
-    pub type Operator<T: Config> = StorageValue<_, T::AccountId>;
-
     #[pallet::event]
     #[pallet::generate_deposit(pub(super) fn deposit_event)]
     pub enum Event<T: Config> {
@@ -213,21 +210,11 @@ pub mod pallet {
         pub fn set_owner(origin: OriginFor<T>, address: T::AccountId) -> DispatchResult {
             Self::check_owner(origin)?;
 
-            <Operator<T>>::put(address);
+            <<T as Config>::OperatorManager>::set_owner(address.clone())?;
+            <Owner<T>>::put(address);
 
             Ok(())
         }
-
-        // #[pallet::weight(1000)]
-        // pub fn set_operator(origin: OriginFor<T>, address: T::AccountId) -> DispatchResult {
-        //     Self::check_owner(origin)?;
-
-        //     <Operator<T>>::put(address.clone());
-
-        //     Self::deposit_event(Event::OperatorSet(address));
-
-        //     Ok(())
-        // }
 
         #[pallet::weight(1000)]
         pub fn set_transfer_vk(origin: OriginFor<T>, data: Vec<u8>) -> DispatchResult {

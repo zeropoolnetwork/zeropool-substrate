@@ -12,7 +12,7 @@ async function initPallet(api, alice, owner) {
     await initAccount(api, alice, owner.address);
 
     // Set the current operator (relayer)
-    const setOperatorTx = api.tx.zeropool.setOperator(owner.address);
+    const setOperatorTx = api.tx.zeropoolOperatorManager.setOperator(owner.address);
 
     // Set verification keys
     const transferVk = fs.readFileSync('params/transfer_verification_key.bin').toString('hex');

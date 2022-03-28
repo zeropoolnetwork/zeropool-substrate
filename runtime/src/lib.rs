@@ -296,6 +296,12 @@ impl pallet_zeropool::Config for Runtime {
     type InitialOwner = InitialOwner;
     type PoolId = PoolId;
     type FirstRoot = FirstRoot;
+    type OperatorManager = ZeropoolOperatorManager;
+}
+
+impl pallet_zeropool::operator::Config for Runtime {
+    type Event = Event;
+    type InitialOwner = InitialOwner;
 }
 
 // Create the runtime by composing the FRAME pallets that were previously configured.
@@ -315,6 +321,7 @@ construct_runtime!(
         Sudo: pallet_sudo,
         Utility: pallet_utility,
         Zeropool: pallet_zeropool,
+        ZeropoolOperatorManager: pallet_zeropool::operator,
     }
 );
 
@@ -494,6 +501,7 @@ impl_runtime_apis! {
             list_benchmark!(list, extra, pallet_balances, Balances);
             list_benchmark!(list, extra, pallet_timestamp, Timestamp);
             list_benchmark!(list, extra, pallet_zeropool, Zeropool);
+            list_benchmark!(list, extra, pallet_zeropool::operator, ZeropoolOperatorManager);
 
             let storage_info = AllPalletsWithSystem::storage_info();
 
@@ -532,6 +540,7 @@ impl_runtime_apis! {
             add_benchmark!(params, batches, pallet_balances, Balances);
             add_benchmark!(params, batches, pallet_timestamp, Timestamp);
             add_benchmark!(params, batches, pallet_zeropool, Zeropool);
+            add_benchmark!(params, batches, pallet_zeropool::operator, ZeropoolOperatorManager);
 
             Ok(batches)
         }
