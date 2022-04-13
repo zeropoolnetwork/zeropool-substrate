@@ -4,7 +4,7 @@ use crate::{
     num::U256,
 };
 use borsh::{BorshDeserialize, BorshSerialize};
-use frame_support::codec::{Decode, Encode};
+use frame_support::codec::{Decode, Encode, MaxEncodedLen};
 use scale_info::TypeInfo;
 
 pub type G1 = [U256; 2];
@@ -17,6 +17,18 @@ pub struct VK {
     pub gamma: G2,
     pub delta: G2,
     pub ic: Vec<G1>,
+}
+
+const MAX_IC_LEN: usize = 6;
+
+impl MaxEncodedLen for VK {
+    fn max_encoded_len() -> usize {
+        let mut len = 0;
+        len += G1::max_encoded_len();
+        len += G2::max_encoded_len() * 3;
+        len += G1::max_encoded_len() * MAX_IC_LEN;
+        len
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize)]

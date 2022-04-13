@@ -1,7 +1,7 @@
 [package]
 name = 'pallet-zeropool'
 version = '4.0.0-dev'
-description = 'FRAME pallet template for defining custom runtime logic.'
+description = 'Implementation of ZeroPool substrate pallet'
 authors = ['Substrate DevHub <https://github.com/substrate-developer-hub>']
 homepage = 'https://substrate.io/'
 edition = '2021'
@@ -14,74 +14,28 @@ targets = ['x86_64-unknown-linux-gnu']
 
 [dependencies]
 borsh = { version = '0.9.1', default-features = false }
-ff-uint =  { version = '0.2.4', default-features = false, features = ['borsh_support', 'scale_support'] }
+ff-uint =  { version = '0.2.4', git = "https://github.com/voidxnull/fawkes-crypto", branch = "update-scale-codec", default-features = false, features = ['borsh_support', 'scale_support'] }
 num-traits = { version = "0.2.14", default-features = false }
 num-derive = "0.3.3"
 lazy_static = "1.4.0"
 log = "0.4.14"
-
-[dependencies.bn]
-package = "zeropool-bn"
-version = "0.5.11"
-default-features = false
-features = ["borsh"]
-
-
-[dependencies.codec]
-default-features = false
-features = ['derive']
-package = 'parity-scale-codec'
-version = '2.0.0'
-
-[dependencies.frame-benchmarking]
-default-features = false
-git = 'https://github.com/paritytech/substrate.git'
-optional = true
-tag = 'monthly-2021-12'
-version = '4.0.0-dev'
-
-[dependencies.frame-support]
-default-features = false
-git = 'https://github.com/paritytech/substrate.git'
-tag = 'monthly-2021-12'
-version = '4.0.0-dev'
-
-[dependencies.frame-system]
-default-features = false
-git = 'https://github.com/paritytech/substrate.git'
-tag = 'monthly-2021-12'
-version = '4.0.0-dev'
-
-[dependencies.scale-info]
-default-features = false
-features = ['derive']
-version = '1.0'
-
-[dependencies.sp-core]
-default-features = false
-git = 'https://github.com/paritytech/substrate.git'
-tag = 'monthly-2021-12'
-version = '4.0.0-dev'
-
-[dependencies.sp-io]
-default-features = false
-git = 'https://github.com/paritytech/substrate.git'
-tag = 'monthly-2021-12'
-version = '4.0.0-dev'
-
-[dependencies.sp-runtime]
-default-features = false
-git = 'https://github.com/paritytech/substrate.git'
-tag = 'monthly-2021-12'
-version = '4.0.0-dev'
-
-[dev-dependencies.pallet-balances]
-git = 'https://github.com/paritytech/substrate.git'
-tag = 'monthly-2021-12'
-version = '4.0.0-dev'
-
-[dev-dependencies]
 hex-literal = "0.3.4"
+bn = { package = "zeropool-bn", version = "0.5.11", default-features = false, features = ["borsh"] }
+
+codec = { package = "parity-scale-codec", version = "3.1.2", default-features = false, features = [
+    "derive",
+    "max-encoded-len",
+] }
+scale-info = { version = "2.0.1", default-features = false, features = ["derive"] }
+frame-support = { default-features = false, version = "4.0.0-dev", git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.18"}
+frame-system = { default-features = false, version = "4.0.0-dev", git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.18" }
+frame-benchmarking = { default-features = false, version = "4.0.0-dev", git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.18", optional = true }
+
+sp-core = { default-features = false, version = "6.0.0", git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.18" }
+sp-io = { default-features = false, version = "6.0.0", git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.18" }
+sp-runtime = { default-features = false, version = "6.0.0", git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.18" }
+
+pallet-balances = { default-features = false, version = "4.0.0-dev", git = "https://github.com/paritytech/substrate.git", branch = "polkadot-v0.9.18" }
 
 [features]
 default = ['std', 'borsh_support']

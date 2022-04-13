@@ -72,6 +72,7 @@ pub fn development_config() -> Result<ChainSpec, String> {
         None,
         // Extensions
         None,
+        None,
     ))
 }
 
@@ -119,6 +120,7 @@ pub fn local_testnet_config() -> Result<ChainSpec, String> {
         None,
         // Extensions
         None,
+        None,
     ))
 }
 
@@ -147,7 +149,7 @@ fn testnet_genesis(
         },
         sudo: SudoConfig {
             // Assign network admin rights.
-            key: root_key,
+            key: Some(root_key),
         },
         transaction_payment: Default::default(),
     }
