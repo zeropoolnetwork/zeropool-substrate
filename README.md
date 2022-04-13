@@ -1,6 +1,6 @@
 # ZeroPool substrate pallet
 
-## Run the full environment
+## Run the full test environment
 Download and unpack asset files: https://1drv.ms/u/s!AugO7xtP17v_lAlM2YH5onQE723q?e=f25vxd
 The only two things needed to start the apps is the docker-compose file and the params directory beside it.
 
