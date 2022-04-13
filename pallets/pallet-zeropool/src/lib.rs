@@ -4,12 +4,9 @@
 #[cfg(not(feature = "std"))]
 extern crate alloc;
 
-use core::str::FromStr;
-
 use borsh::BorshDeserialize;
 use ff_uint::Uint;
 use frame_support::traits::Currency;
-use lazy_static::lazy_static;
 use maybestd::vec::Vec;
 pub use pallet::*;
 use sp_io::hashing::keccak_256;
@@ -23,9 +20,9 @@ mod alt_bn128;
 mod error;
 mod maybestd;
 pub mod num;
+pub mod operator;
 mod tx_decoder;
 mod verifier;
-pub mod operator;
 
 #[cfg(test)]
 mod mock;
@@ -39,13 +36,13 @@ mod benchmarking;
 type AccountIdOf<T> = <T as frame_system::Config>::AccountId;
 type BalanceOf<T> = <<T as Config>::Currency as Currency<AccountIdOf<T>>>::Balance;
 
-lazy_static! {
-    static ref R: U256 = U256::from_str(
-        "21888242871839275222246405745257275088548364400416034343698204186575808495617"
-    )
-    .unwrap();
-    static ref DENOMINATOR: U256 = U256::from(1000u64);
-}
+pub const FIRST_ROOT: U256 = U256::from_const_str(
+    b"11469701942666298368112882412133877458305516134926649826543144744382391691533",
+);
+pub const DENOMINATOR: U256 = U256::from_const_str(b"1000");
+const R: U256 = U256::from_const_str(
+    b"21888242871839275222246405745257275088548364400416034343698204186575808495617",
+);
 
 #[derive(Debug, BorshDeserialize)]
 pub struct MerkleProof<const L: usize> {
@@ -69,7 +66,7 @@ pub mod pallet {
         PalletId,
     };
     use frame_system::pallet_prelude::*;
-    use sp_core::crypto::Public;
+    use sp_core::crypto::ByteArray;
     use sp_runtime::traits::Verify;
 
     /// Configure the pallet by specifying the parameters and types on which it depends.
@@ -80,16 +77,18 @@ pub mod pallet {
         type PalletId: Get<PalletId>;
         type Currency: Currency<Self::AccountId>;
 
+        /// Any implementation of OperatorManager. This is used to get the current operator
+        /// (relayer). There is a default simple implementation in
+        /// `pallet-zeropool::operator`.
         type OperatorManager: OperatorManager<Self::AccountId>;
 
+        /// Initial owner of the pallet. The owner is the account that is allowed to manually change
+        /// the verification keys.
         #[pallet::constant]
         type InitialOwner: Get<Self::AccountId>;
 
         #[pallet::constant]
         type PoolId: Get<NativeU256>;
-
-        #[pallet::constant]
-        type FirstRoot: Get<NativeU256>;
     }
 
     #[pallet::pallet]
@@ -101,7 +100,7 @@ pub mod pallet {
 
     #[pallet::type_value]
     pub fn FirstRoot<T: Config>() -> NativeU256 {
-        T::FirstRoot::get()
+        FIRST_ROOT.into()
     }
 
     #[pallet::storage]
@@ -148,6 +147,7 @@ pub mod pallet {
         InvalidTxFormat,
         DoubleSpend,
         InvalidDepositSignature,
+        InvalidDepositAddress,
         Deserialization,
         IncorrectAmount,
         TransferVkNotSet,
@@ -242,8 +242,6 @@ pub mod pallet {
             Ok(())
         }
 
-        // TODO: Split into separate methods?
-        // TODO: Weight
         #[pallet::weight(1000)]
         pub fn transact(origin: OriginFor<T>, data: Vec<u8>) -> DispatchResult {
             let operator = Self::check_operator(origin)?;
@@ -251,8 +249,8 @@ pub mod pallet {
             log::info!("Processing ZeroPool transaction");
 
             let tx = TxDecoder::new(data.as_slice());
-            let message_hash = keccak_256(tx.memo_message()); // FIXME: REDUCE!!!
-            let message_hash_num = U256::from_little_endian(&message_hash).unchecked_rem(*R);
+            let message_hash = keccak_256(tx.memo_message());
+            let message_hash_num = U256::from_little_endian(&message_hash).unchecked_rem(R);
             let mut pool_index: U256 = <PoolIndex<T>>::get().into();
             let root_before: U256 = <Roots<T>>::get::<NativeU256>(pool_index.into()).into();
 
@@ -337,7 +335,12 @@ pub mod pallet {
                         match sp_core::sr25519::Signature::try_from(tx.deposit_signature()) {
                             Ok(signature) => {
                                 let signer =
-                                    sp_core::sr25519::Public::from_slice(tx.deposit_address());
+                                    sp_core::sr25519::Public::from_slice(tx.deposit_address())
+                                        .map_err(|_err| {
+                                            Into::<DispatchError>::into(
+                                                Error::<T>::InvalidDepositAddress,
+                                            )
+                                        })?;
                                 signature.verify(tx.nullifier_bytes(), &signer)
                             },
                             _ => false,
@@ -348,7 +351,7 @@ pub mod pallet {
                     }
 
                     log::debug!("    Preparing amounts");
-                    let encoded_amount = (token_amount.unchecked_mul(*DENOMINATOR)).encode();
+                    let encoded_amount = (token_amount.unchecked_mul(DENOMINATOR)).encode();
                     let native_amount = <BalanceOf<T>>::decode(&mut &encoded_amount[..])
                         .map_err(|_err| Into::<DispatchError>::into(Error::<T>::Deserialization))?;
 
@@ -374,7 +377,7 @@ pub mod pallet {
 
                     log::debug!("    Preparing amounts");
                     let encoded_amount =
-                        (token_amount.overflowing_neg().0.unchecked_mul(*DENOMINATOR)).encode();
+                        (token_amount.overflowing_neg().0.unchecked_mul(DENOMINATOR)).encode();
                     let native_amount = <BalanceOf<T>>::decode(&mut &encoded_amount[..])
                         .map_err(|_err| Into::<DispatchError>::into(Error::<T>::Deserialization))?;
 
@@ -409,7 +412,7 @@ pub mod pallet {
 
             if fee > U256::ZERO {
                 log::debug!("    Processing fee");
-                let encoded_fee = (fee.unchecked_mul(*DENOMINATOR).overflowing_neg().0).encode();
+                let encoded_fee = (fee.unchecked_mul(DENOMINATOR).overflowing_neg().0).encode();
                 let native_fee = <BalanceOf<T>>::decode(&mut &encoded_fee[..])
                     .map_err(|_err| Into::<DispatchError>::into(Error::<T>::Deserialization))?;
 
