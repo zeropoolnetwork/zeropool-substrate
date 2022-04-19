@@ -1,13 +1,16 @@
 use frame_support::dispatch::DispatchResult;
 
-pub trait OperatorManager<AccountId> {
-    fn operator() -> Option<AccountId>;
+pub trait OperatorManager<AccountId>
+where
+    AccountId: PartialEq,
+{
+    fn is_operator(account: AccountId) -> bool;
     fn set_owner(new_owner: AccountId) -> DispatchResult;
 }
 
-impl<AccountId: Default> OperatorManager<AccountId> for () {
-    fn operator() -> Option<AccountId> {
-        Some(AccountId::default())
+impl<AccountId: PartialEq> OperatorManager<AccountId> for () {
+    fn is_operator(_: AccountId) -> bool {
+        true
     }
 
     fn set_owner(_new_owner: AccountId) -> DispatchResult {
@@ -80,7 +83,7 @@ pub mod pallet {
 
     #[pallet::call]
     impl<T: Config> Pallet<T> {
-        #[pallet::weight(10_000 + T::DbWeight::get().writes(1))]
+        #[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1, 1))]
         pub fn set_operator(origin: OriginFor<T>, address: T::AccountId) -> DispatchResult {
             Self::check_owner(origin)?;
 
@@ -93,8 +96,8 @@ pub mod pallet {
     }
 
     impl<T: Config> OperatorManager<T::AccountId> for Pallet<T> {
-        fn operator() -> Option<T::AccountId> {
-            Operator::<T>::get()
+        fn is_operator(account: T::AccountId) -> bool {
+            Operator::<T>::get().map(|op| op == account).unwrap_or(false)
         }
 
         fn set_owner(new_owner: T::AccountId) -> DispatchResult {

@@ -172,8 +172,8 @@ pub mod pallet {
             T::PalletId::get().into_account()
         }
 
-        fn operator() -> Result<T::AccountId, DispatchError> {
-            <<T as Config>::OperatorManager>::operator().ok_or(Error::<T>::NotOperator.into())
+        fn is_operator(account: T::AccountId) -> bool {
+            <<T as Config>::OperatorManager>::is_operator(account)
         }
 
         fn owner() -> T::AccountId {
@@ -182,9 +182,8 @@ pub mod pallet {
 
         fn check_operator(origin: OriginFor<T>) -> Result<T::AccountId, DispatchError> {
             let who = ensure_signed(origin)?;
-            let operator = Self::operator()?;
 
-            if who != operator {
+            if !Self::is_operator(who.clone()) {
                 log::warn!("Failed to enforce an operator");
                 return Err(Error::<T>::NotOperator.into())
             }
