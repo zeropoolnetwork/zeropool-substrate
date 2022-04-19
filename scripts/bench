@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+
+cargo build --release --features runtime-benchmarks && \
+
+./target/release/node-template benchmark \
+    --chain dev \
+    --execution wasm \
+    --wasm-execution compiled \
+    --pallet pallet-zeropool \
+    --extrinsic '*' \
+    --json \
+    --output ./pallets/pallet-zeropool/src/weights.rs

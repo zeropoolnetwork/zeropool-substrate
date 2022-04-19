@@ -1,4 +1,7 @@
 {
+  "scripts": {
+    "init": "node init.js"
+  },
   "dependencies": {
     "@polkadot/api": "^7.4.1",
     "@polkadot/keyring": "^8.3.2",
