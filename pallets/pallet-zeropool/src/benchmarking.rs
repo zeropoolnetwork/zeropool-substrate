@@ -2,6 +2,7 @@
 
 use super::*;
 
+#[allow(unused_imports)]
 use crate::Pallet as Zeropool;
 use frame_benchmarking::{benchmarks, whitelisted_caller};
 use frame_system::RawOrigin;

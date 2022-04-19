@@ -504,7 +504,7 @@ impl_runtime_apis! {
             list_benchmark!(list, extra, pallet_balances, Balances);
             list_benchmark!(list, extra, pallet_timestamp, Timestamp);
             list_benchmark!(list, extra, pallet_zeropool, Zeropool);
-            list_benchmark!(list, extra, pallet_zeropool::operator, ZeropoolOperatorManager);
+            // list_benchmark!(list, extra, pallet_zeropool::operator, ZeropoolOperatorManager);
 
             let storage_info = AllPalletsWithSystem::storage_info();
 
@@ -543,7 +543,7 @@ impl_runtime_apis! {
             add_benchmark!(params, batches, pallet_balances, Balances);
             add_benchmark!(params, batches, pallet_timestamp, Timestamp);
             add_benchmark!(params, batches, pallet_zeropool, Zeropool);
-            add_benchmark!(params, batches, pallet_zeropool::operator, ZeropoolOperatorManager);
+            // add_benchmark!(params, batches, pallet_zeropool::operator, ZeropoolOperatorManager);
 
             Ok(batches)
         }
