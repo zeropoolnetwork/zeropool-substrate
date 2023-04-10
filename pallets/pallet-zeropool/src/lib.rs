@@ -251,7 +251,7 @@ pub mod pallet {
             let message_hash = keccak_256(tx.memo_message());
             let message_hash_num = U256::from_little_endian(&message_hash).unchecked_rem(R);
             let mut pool_index: U256 = <PoolIndex<T>>::get().into();
-            let root_before: U256 = <Roots<T>>::get::<NativeU256>(pool_index.into()).into();
+            let pool_root: U256 = <Roots<T>>::get::<NativeU256>(pool_index.into()).into();
 
             // Verify transfer proof
             log::debug!("Verifying transfer proof:");
@@ -260,6 +260,7 @@ pub mod pallet {
             const DELTA_SIZE: u32 = 256;
             let delta = tx.delta().unchecked_add(pool_id.unchecked_shr(DELTA_SIZE));
             log::debug!("    Preparing data");
+            let root_before: U256 = <Roots<T>>::get::<NativeU256>(tx.transfer_index().into()).into();
             let transact_inputs =
                 [root_before, tx.nullifier().into(), tx.out_commit(), delta, message_hash_num];
             log::debug!("    Verification");
@@ -280,7 +281,7 @@ pub mod pallet {
             log::debug!("Verifying tree proof:");
             let tree_vk = <TreeVk<T>>::get().ok_or(Error::<T>::TreeVkNotSet)?;
             log::debug!("    Preparing data");
-            let tree_inputs = [root_before, tx.root_after(), tx.out_commit()];
+            let tree_inputs = [pool_root, tx.root_after(), tx.out_commit()];
             log::debug!("    Verification");
             alt_bn128_groth16verify(&tree_vk, &tx.tree_proof(), &tree_inputs)
                 .map_err(|err| Into::<Error<T>>::into(err))?;
@@ -364,13 +365,8 @@ pub mod pallet {
                 },
                 TxType::Withdraw => {
                     log::debug!("Processing withdraw:");
-                    // if token_amount < U256::MAX.unchecked_div(U256::from(2u32)) ||
-                    //     energy_amount < U256::MAX.unchecked_div(U256::from(2u32))
-                    // {
-                    //     return Err(Error::<T>::IncorrectAmount.into())
-                    // }
-
                     log::debug!("    Extracting the destination address");
+
                     let dest = T::AccountId::decode(&mut tx.memo_address())
                         .map_err(|_err| Into::<DispatchError>::into(Error::<T>::Deserialization))?;
 
