@@ -1,5 +1,6 @@
 use crate::{self as pallet_zeropool, num::U256};
 use ff_uint::Uint;
+use frame_benchmarking::whitelisted_caller;
 use frame_support::{parameter_types, PalletId};
 use sp_core::{crypto::AccountId32, H256};
 use sp_runtime::{
@@ -12,9 +13,11 @@ type Block = frame_system::mocking::MockBlock<Test>;
 type Balance = u128;
 type AccountId = AccountId32;
 
-const OWNER: AccountId = AccountId::new(hex_literal::hex!(
-    "d000ac5048ae858aca2e6aa43e00661562a47026fe88ff83992430204a159752"
-));
+// const OWNER: AccountId = AccountId::new(hex_literal::hex!(
+//     "d000ac5048ae858aca2e6aa43e00661562a47026fe88ff83992430204a159752"
+// ));
+
+const OWNER: AccountId = whitelisted_caller();
 
 // Configure a mock runtime to test the pallet.
 frame_support::construct_runtime!(
@@ -85,7 +88,7 @@ impl pallet_zeropool::Config for Test {
     type PalletId = TestPalletId;
     type Currency = Balances;
 
-    type OperatorManager = ZeropoolOperatorManager;
+    type OperatorManager = ();
     type PoolId = PoolId;
     type InitialOwner = InitialOwner;
 }

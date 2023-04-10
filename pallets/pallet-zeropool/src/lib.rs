@@ -386,7 +386,7 @@ pub mod pallet {
                 },
             }
 
-            // TODO: Find a less irritating way to created an indexed event.
+            // TODO: Find a less irritating way to create an indexed event.
             log::debug!("Emitting event");
             let event = Event::Message(
                 pool_index.into(),
@@ -418,6 +418,8 @@ pub mod pallet {
                     ExistenceRequirement::AllowDeath,
                 )?;
             }
+
+            log::debug!("Updating state");
 
             <PoolIndex<T>>::put::<NativeU256>(pool_index.into());
             <Roots<T>>::insert::<NativeU256, NativeU256>(pool_index.into(), tx.root_after().into());
