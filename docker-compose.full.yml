@@ -21,6 +21,7 @@ services:
     image: redis:6.2.6
   relayer_polkadot:
     image: voidxnull/zeropool-relayer-polkadot:latest
+    container_name: relayer_polkadot
     depends_on:
       - substrate_node
       - redis_polkadot

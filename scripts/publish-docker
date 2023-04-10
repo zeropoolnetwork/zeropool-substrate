@@ -8,4 +8,4 @@ VERSION=`cat VERSION`
 docker build -t $USERNAME/$IMAGE:latest . && \
 docker tag $USERNAME/$IMAGE:latest $USERNAME/$IMAGE:$VERSION && \
 docker push $USERNAME/$IMAGE:latest && \
-docker push $USERNAME/$IMAGE:VERSION
+docker push $USERNAME/$IMAGE:$VERSION
