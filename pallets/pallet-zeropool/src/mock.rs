@@ -79,7 +79,6 @@ impl pallet_balances::Config for Test {
 
 parameter_types! {
     pub const TestPalletId: PalletId = PalletId(*b"zeropool");
-    pub const PoolId: U256 = U256::ZERO;
     pub const InitialOwner: <Test as frame_system::Config>::AccountId = OWNER;
 }
 
@@ -89,7 +88,6 @@ impl pallet_zeropool::Config for Test {
     type Currency = Balances;
 
     type OperatorManager = ();
-    type PoolId = PoolId;
     type InitialOwner = InitialOwner;
 }
 

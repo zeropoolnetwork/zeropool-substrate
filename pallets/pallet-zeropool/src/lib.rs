@@ -86,9 +86,6 @@ pub mod pallet {
         /// the verification keys.
         #[pallet::constant]
         type InitialOwner: Get<Self::AccountId>;
-
-        #[pallet::constant]
-        type PoolId: Get<NativeU256>;
     }
 
     #[pallet::pallet]
@@ -118,6 +115,14 @@ pub mod pallet {
 
     #[pallet::storage]
     pub type TreeVk<T> = StorageValue<_, VK>;
+
+    #[pallet::type_value]
+    pub fn DefaultPoolId<T: Config>() -> NativeU256 {
+        FIRST_ROOT.into()
+    }
+
+    #[pallet::storage]
+    pub type PoolId<T> = StorageValue<_, NativeU256, ValueQuery, DefaultPoolId<T>>;
 
     #[pallet::type_value]
     pub fn DefaultOwner<T: Config>() -> T::AccountId {
@@ -206,6 +211,13 @@ pub mod pallet {
     #[pallet::call]
     impl<T: Config> Pallet<T> {
         #[pallet::weight(1000)]
+        pub fn set_pool_id(origin: OriginFor<T>, pool_id: NativeU256) -> DispatchResult {
+            Self::check_owner(origin)?;
+            <PoolId<T>>::put(pool_id);
+            Ok(())
+        }
+
+        #[pallet::weight(1000)]
         pub fn set_owner(origin: OriginFor<T>, address: T::AccountId) -> DispatchResult {
             Self::check_owner(origin)?;
 
@@ -256,7 +268,7 @@ pub mod pallet {
             // Verify transfer proof
             log::debug!("Verifying transfer proof:");
             let transfer_vk = <TransferVk<T>>::get().ok_or(Error::<T>::TransferVkNotSet)?;
-            let pool_id: U256 = T::PoolId::get().into();
+            let pool_id: U256 = <PoolId<T>>::get().into();
             const DELTA_SIZE: u32 = 256;
             let delta = tx.delta().unchecked_add(pool_id.unchecked_shr(DELTA_SIZE));
             log::debug!("    Preparing data");

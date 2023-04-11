@@ -288,7 +288,6 @@ impl pallet_utility::Config for Runtime {
 
 parameter_types! {
     pub const ZeropoolPalletId: PalletId = PalletId(*b"zeropool");
-    pub const PoolId: U256 = U256::ZERO;
     // Seed phrase: test test test test test test test test test test test junk
     pub const InitialOwner: AccountId = AccountId::new(hex!("d000ac5048ae858aca2e6aa43e00661562a47026fe88ff83992430204a159752"));
 }
@@ -298,7 +297,6 @@ impl pallet_zeropool::Config for Runtime {
     type PalletId = ZeropoolPalletId;
     type Currency = Balances;
     type InitialOwner = InitialOwner;
-    type PoolId = PoolId;
     type OperatorManager = ZeropoolOperatorManager;
 }
 
