@@ -52,8 +52,6 @@ services:
       - NETWORK=polkadot
       - RPC_URL=ws://${DOCKER_GATEWAY_HOST:-localhost}:9944
       - RELAYER_URL=http://${DOCKER_GATEWAY_HOST:-localhost}:3001
-      - CONTRACT_ADDRESS=0xC40Dd5B1250F4A7E70E1823d1D8eAbEA247cB1B3 # TODO: irrelevant, remove
-      - TOKEN_ADDRESS=0xcda2B3489aCDB31A428bd33fcAEE5c7c50919b35 # TODO: irrelevant, remove
       # - VIRTUAL_HOST=polkadot.testnet.console.v2.zeropool.network
       # - LETSENCRYPT_HOST=polkadot.testnet.console.v2.zeropool.network
       # - LETSENCRYPT_EMAIL=mail@test.com
