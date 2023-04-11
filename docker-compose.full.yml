@@ -45,7 +45,7 @@ services:
     ports:
       - 3001:3001
   console_polkadot:
-    image: voidxnull/zeropool-console
+    image: voidxnull/zeropool-console:0.3.3
     container_name: console_polkadot
     restart: always
     environment:
